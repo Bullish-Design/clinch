@@ -13,6 +13,7 @@ from clinch import (
     ParsingFailure,
     ParsingResult,
     TimeoutError,
+    BaseCLIResponse,
     regex_helpers,
 )
 
@@ -27,3 +28,4 @@ def test_import_clinch_package_and_exports() -> None:
     assert CommandNotFoundError is not None
     assert TimeoutError is not None
     assert regex_helpers is not None
+    assert BaseCLIResponse is not None
