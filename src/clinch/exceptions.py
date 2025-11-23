@@ -1,9 +1,13 @@
 # src/clinch/exceptions.py
 from __future__ import annotations
 
-from typing import Iterable
+"""Exception hierarchy for CLInch.
 
-from clinch.parsing import ParsingFailure
+These exceptions are used throughout the library to provide structured
+error handling for parsing and CLI execution.
+"""
+
+from clinch.parsing.result import ParsingFailure
 
 
 class CLInchException(Exception):
@@ -14,43 +18,26 @@ class ParsingError(CLInchException):
     """Raised when parsing fails in strict mode.
 
     Carries the collection of :class:`ParsingFailure` instances that
-    triggered the error so callers can inspect which lines failed and why.
+    triggered the error. The string representation includes a short
+    summary and a preview of the first failing line.
     """
 
-    def __init__(self, failures: Iterable[ParsingFailure]) -> None:
-        self.failures = list(failures)
-        message = f"{len(self.failures)} parsing failure(s)"
-        super().__init__(message)
+    def __init__(self, failures: list[ParsingFailure]) -> None:
+        self.failures = failures
+        super().__init__(self.__str__())
 
-    @property
-    def failure_count(self) -> int:
-        """Number of parsing failures associated with this error."""
-        return len(self.failures)
+    def __str__(self) -> str:
+        if not self.failures:
+            return "Failed to parse 0 line(s)."
+
+        first = self.failures[0]
+        preview = first.raw_text[:50]
+        return f"Failed to parse {len(self.failures)} line(s). First failure: {preview}..."
 
 
 class CommandNotFoundError(CLInchException):
-    """Raised when the configured CLI command cannot be found."""
-
-    def __init__(
-        self,
-        command: str,
-        original_exception: Exception | None = None,
-    ) -> None:
-        self.command = command
-        self.original_exception = original_exception
-
-        base_message = f"Command not found: {command}"
-        if original_exception is not None:
-            base_message = f"{base_message} ({original_exception})"
-
-        super().__init__(base_message)
+    """Raised when CLI command doesn't exist in PATH."""
 
 
 class TimeoutError(CLInchException):
-    """Raised when command execution times out."""
-
-    def __init__(self, command: str, timeout: float) -> None:
-        self.command = command
-        self.timeout = float(timeout)
-        message = f"Command '{command}' timed out after {self.timeout} seconds"
-        super().__init__(message)
+    """Raised when CLI command execution exceeds timeout."""

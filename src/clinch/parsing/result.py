@@ -18,15 +18,13 @@ class ParsingFailure(BaseModel):
     exception: str | None = Field(default=None, description="Exception message if any")
     line_number: int = Field(description="Line number in output (1-indexed)")
 
-    def retry_with_pattern(self, pattern: str) -> T | None:
-        """Retry parsing with an alternative pattern.
+    def retry_with_pattern(self, pattern: str) -> None:
+        """Record an additional attempted pattern.
 
-        Actual parsing logic will be provided by the parsing engine in a
-        later step. For now, this method records the attempted pattern and
-        returns None to signal no re-parse was performed.
+        Actual re-parsing is performed by the parsing engine in later steps.
+        For now, this method only tracks that another pattern was tried.
         """
         self.attempted_patterns.append(pattern)
-        return None
 
 
 class ParsingResult(BaseModel, Generic[T]):

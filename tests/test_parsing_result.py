@@ -67,7 +67,6 @@ def test_retry_with_pattern_appends_pattern_and_returns_none() -> None:
         line_number=1,
     )
 
-    result = failure.retry_with_pattern("new-pattern")
+    failure.retry_with_pattern("new-pattern")
 
-    assert result is None
     assert "new-pattern" in failure.attempted_patterns
