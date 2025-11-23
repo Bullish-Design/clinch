@@ -1,11 +1,7 @@
 # src/clinch/exceptions.py
 from __future__ import annotations
 
-"""Exception hierarchy for CLInch.
-
-These exceptions are used throughout the library to provide structured
-error handling for parsing and CLI execution.
-"""
+"""Exception hierarchy for CLInch."""
 
 from clinch.parsing.result import ParsingFailure
 
@@ -15,12 +11,7 @@ class CLInchException(Exception):
 
 
 class ParsingError(CLInchException):
-    """Raised when parsing fails in strict mode.
-
-    Carries the collection of :class:`ParsingFailure` instances that
-    triggered the error. The string representation includes a short
-    summary and a preview of the first failing line.
-    """
+    """Raised when parsing fails in strict mode."""
 
     def __init__(self, failures: list[ParsingFailure]) -> None:
         self.failures = failures

@@ -19,11 +19,7 @@ class ParsingFailure(BaseModel):
     line_number: int = Field(description="Line number in output (1-indexed)")
 
     def retry_with_pattern(self, pattern: str) -> None:
-        """Record an additional attempted pattern.
-
-        Actual re-parsing is performed by the parsing engine in later steps.
-        For now, this method only tracks that another pattern was tried.
-        """
+        """Record an additional attempted pattern."""
         self.attempted_patterns.append(pattern)
 
 
