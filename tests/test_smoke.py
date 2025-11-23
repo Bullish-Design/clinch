@@ -6,6 +6,7 @@ import clinch.base  # noqa: F401
 import clinch.parsing  # noqa: F401
 import clinch.utils  # noqa: F401
 from clinch import (
+    BaseCLIResponse,
     CLInchException,
     CommandNotFoundError,
     Field,
@@ -13,7 +14,6 @@ from clinch import (
     ParsingFailure,
     ParsingResult,
     TimeoutError,
-    BaseCLIResponse,
     regex_helpers,
 )
 
