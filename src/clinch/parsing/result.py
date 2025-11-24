@@ -14,23 +14,20 @@ class ParsingFailure(BaseModel):
     """Details about a single parsing failure."""
 
     raw_text: str = Field(description="Original line that failed to parse")
-    attempted_patterns: list[str] = Field(
-        default_factory=list,
-        description="Patterns that were tried against this line",
-    )
+    attempted_patterns: list[str] = Field(description="Regex patterns that were tried")
     exception: str | None = Field(
         default=None,
-        description="Validation or parsing error details, if any",
+        description="Exception message if any",
     )
-    line_number: int = Field(description="1-based line number in the original output")
+    line_number: int = Field(description="Line number in output (1-indexed)")
+
+    def retry_with_pattern(self, pattern: str) -> None:
+        """Record an additional attempted pattern."""
+        self.attempted_patterns.append(pattern)
 
 
 class ParsingResult(BaseModel, Generic[T]):
-    """Container for parsing results.
-
-    Holds successfully parsed instances and information about any
-    failures that occurred during parsing.
-    """
+    """Container for parsing results with success/failure tracking."""
 
     successes: list[T] = Field(
         default_factory=list,
@@ -53,7 +50,7 @@ class ParsingResult(BaseModel, Generic[T]):
     def failure_count(self) -> int:
         return len(self.failures)
 
-    # Helper methods (Step 4 of refactoring roadmap)
+    # Step 4 helpers
 
     def raise_if_failures(self) -> None:
         """Raise ParsingError if any failures occurred."""

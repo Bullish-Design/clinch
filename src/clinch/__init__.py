@@ -8,7 +8,7 @@ custom fields, parsing results, core base classes, and the exception
 hierarchy.
 """
 
-from .base import BaseCLIError, BaseCLIResponse, CLIWrapper
+from .base import BaseCLICommand, BaseCLIError, BaseCLIResponse, CLIWrapper
 from .exceptions import CLInchException, CommandNotFoundError, ParsingError, TimeoutError
 from .fields import Field
 from .parsing import ParsingFailure, ParsingResult
@@ -26,6 +26,7 @@ __all__ = [
     "BaseCLIResponse",
     "BaseCLIError",
     "CLIWrapper",
+    "BaseCLICommand",
 ]
 
 __version__ = "0.1.0"

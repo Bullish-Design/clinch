@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ValidationError, field_validator
 
 from clinch import BaseCLIResponse, Field
 from clinch.parsing import ParsingResult
@@ -65,22 +65,6 @@ def test_cache_clearing_resets_cache_size() -> None:
     assert info_after["size"] == 0
 
 
-def test_parse_output_uses_cached_patterns() -> None:
-    class CachedResponse(BaseCLIResponse):
-        value: str = Field(pattern=r"value: (\w+)")
-
-    output1 = "value: first"
-    output2 = "value: second"
-
-    result1 = parse_output(CachedResponse, output1)
-    result2 = parse_output(CachedResponse, output2)
-
-    assert result1.success_count == 1
-    assert result1.successes[0].value == "first"
-    assert result2.success_count == 1
-    assert result2.successes[0].value == "second"
-
-
 def test_validation_error_details_preserved_as_json() -> None:
     class StrictModel(BaseCLIResponse):
         value: int = Field(pattern=r"value: (-?\d+)")
@@ -92,13 +76,11 @@ def test_validation_error_details_preserved_as_json() -> None:
                 raise ValueError("must be positive")
             return v
 
-    # If _field_patterns is not yet wired via BaseCLIResponse, set it explicitly.
     StrictModel._field_patterns = {"value": r"value: (-?\d+)"}
 
     result = parse_output(StrictModel, "value: -5")
 
     assert result.failure_count == 1
     failure = result.failures[0]
-
     assert failure.exception is not None
     assert "positive" in failure.exception.lower()

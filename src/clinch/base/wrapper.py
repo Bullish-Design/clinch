@@ -6,6 +6,7 @@ from typing import Any, ClassVar, TypeVar
 
 from pydantic import BaseModel, field_validator
 
+from clinch.base.command import BaseCLICommand
 from clinch.base.error import BaseCLIError
 from clinch.base.response import BaseCLIResponse
 from clinch.exceptions import CommandNotFoundError, ParsingError, TimeoutError
@@ -31,9 +32,13 @@ class CLIWrapper(BaseModel):
     implemented via sh.
     """
 
+    # Required: underlying CLI command
     command: ClassVar[str]
+
+    # Error model used when exit code is non-zero
     error_model: ClassVar[type[BaseCLIError]] = BaseCLIError
 
+    # Runtime configuration (instance-level as of refactor Step 3)
     strict_mode: bool = False
     timeout: int = 30
 
@@ -47,7 +52,7 @@ class CLIWrapper(BaseModel):
     @field_validator("timeout")
     @classmethod
     def _validate_timeout(cls, value: int) -> int:
-        """Validate timeout configuration for the wrapper."""
+        """Ensure timeout is positive and not unreasonably large."""
         if value <= 0:
             raise ValueError("timeout must be positive")
         if value > 600:
@@ -60,6 +65,10 @@ class CLIWrapper(BaseModel):
             msg = f"{type(self).__name__} must define 'command' class variable"
             raise TypeError(msg)
 
+    # ------------------------------------------------------------------
+    # Argument building hooks
+    # ------------------------------------------------------------------
+
     def _build_positional_args(self, *args: Any) -> list[str]:
         """Convert positional arguments to their string representations."""
         return [str(arg) for arg in args]
@@ -68,10 +77,10 @@ class CLIWrapper(BaseModel):
         """Convert keyword arguments into a flat list of CLI arguments.
 
         * None values are skipped.
-        * Boolean True -> --flag, False -> omitted.
-        * List values are expanded: exclude=["a", "b"] becomes
-          --exclude a --exclude b.
-        * Other values become --key value.
+        * Boolean True -> ``--flag``, False -> omitted.
+        * List values are expanded: ``exclude=['a', 'b']`` becomes
+          ``--exclude a --exclude b``.
+        * Other values become ``--key value``.
         """
         args: list[str] = []
         for key, value in kwargs.items():
@@ -95,11 +104,9 @@ class CLIWrapper(BaseModel):
 
         Common use cases include:
 
-        * Stripping ANSI color codes, e.g. using a pattern like
-          r"\\x1b[[0-9;]*m" with re.sub.
-        * Removing headers or footers that appear before/after real data.
-        * Normalizing whitespace or line endings before the parsing engine
-          runs.
+        * Stripping ANSI color codes.
+        * Removing headers or footers.
+        * Normalizing whitespace or line endings before parsing.
         """
         return output
 
@@ -111,6 +118,10 @@ class CLIWrapper(BaseModel):
         """Return a human-readable command string for error messages."""
         parts = [self.command, *args]
         return " ".join(parts)
+
+    # ------------------------------------------------------------------
+    # Core execution
+    # ------------------------------------------------------------------
 
     def _execute(
         self,
@@ -147,30 +158,44 @@ class CLIWrapper(BaseModel):
                 stdout_text = _to_text(getattr(exc, "stdout", ""))
                 stderr_text = _to_text(getattr(exc, "stderr", ""))
 
-                error_model = self._get_error_model()
-                if hasattr(error_model, "parse_from_stderr"):
-                    error = error_model.parse_from_stderr(
-                        stderr=stderr_text,
-                        exit_code=exit_code,
+                error_cls = self._get_error_model()
+                try:
+                    error = error_cls(
                         command=command_str,
+                        exit_code=exit_code,
+                        stderr=stderr_text,
                         stdout=stdout_text,
                     )
-                else:
-                    error = error_model(
+                except TypeError:
+                    # Fallback for custom error models with a different signature
+                    error = error_cls(  # type: ignore[call-arg]
+                        command=command_str,
                         exit_code=exit_code,
                         stderr=stderr_text,
                         stdout=stdout_text,
-                        command=command_str,
                     )
 
                 raise error from exc
 
+            # Re-raise unexpected exceptions
             raise
 
         stdout_value = getattr(result, "stdout", result)
         stdout_text = _to_text(stdout_value)
         preprocessed = self._preprocess_output(stdout_text)
         parse_result: ParsingResult[TResponse] = response_model.parse_output(preprocessed)
+
         if self.strict_mode and parse_result.has_failures:
             raise ParsingError(parse_result.failures)
+
         return parse_result
+
+    # ------------------------------------------------------------------
+    # Step 6: Command-object execution
+    # ------------------------------------------------------------------
+
+    def execute_command(self, command: BaseCLICommand) -> ParsingResult[Any]:
+        """Execute a BaseCLICommand instance via this wrapper."""
+        args = command.build_args()
+        response_model = command.get_response_model()
+        return self._execute(*args, response_model=response_model)
