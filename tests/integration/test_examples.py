@@ -11,7 +11,7 @@ class EchoExampleResponse(BaseCLIResponse):
 
 class EchoExampleWrapper(CLIWrapper):
     command = "echo"
-    strict_mode = True
+    strict_mode: bool = True
 
     def echo_value(self, value: str) -> EchoExampleResponse:
         result = self._execute(f"value={value}", response_model=EchoExampleResponse)

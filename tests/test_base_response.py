@@ -10,8 +10,8 @@ from clinch.parsing import ParsingResult
 class _TestResponse(BaseCLIResponse):
     value: str = Field(pattern=r"value: (\w+)")
 
-    def __init__(self, value: str) -> None:  # pragma: no cover
-        super().__init__(value=value)
+    # def __init__(self, value: str) -> None:  # pragma: no cover
+    #     super().__init__(value=value)
 
 
 class MixedResponse(BaseCLIResponse):

@@ -86,11 +86,10 @@ def parse_output(
         try:
             instance = model(**matched_values)
         except ValidationError as exc:
-            # Step 2: preserve full validation error details
+            # Preserve full validation details where possible
             try:
                 exception_detail = exc.json()
             except Exception:
-                # If JSON serialization fails for any reason, fall back to str()
                 exception_detail = str(exc)
 
             result.failures.append(

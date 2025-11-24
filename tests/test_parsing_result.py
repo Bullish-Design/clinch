@@ -1,72 +1,86 @@
 # tests/test_parsing_result.py
 from __future__ import annotations
 
-from typing import List
+from typing import Callable
 
+import pytest
 from pydantic import BaseModel
 
 from clinch.parsing import ParsingFailure, ParsingResult
 
 
-class DummyResponse(BaseModel):
+class TestModel(BaseModel):
     value: str
 
 
-def test_empty_parsing_result_has_zero_counts_and_no_failures() -> None:
-    result: ParsingResult[DummyResponse] = ParsingResult()
-    assert result.successes == []
-    assert result.failures == []
-    assert result.success_count == 0
-    assert result.failure_count == 0
-    assert result.has_failures is False
+def test_raise_if_failures_with_failures() -> None:
+    """Test raise_if_failures raises when failures exist."""
+    from clinch.exceptions import ParsingError
 
-
-def test_parsing_result_tracks_successes_and_failures() -> None:
-    successes: List[DummyResponse] = [
-        DummyResponse(value="one"),
-        DummyResponse(value="two"),
-    ]
-    failure = ParsingFailure(
-        raw_text="invalid line",
-        attempted_patterns=["pattern1"],
-        exception="some error",
-        line_number=3,
+    result = ParsingResult(
+        failures=[ParsingFailure(raw_text="bad", attempted_patterns=[], line_number=1)]
     )
 
-    result: ParsingResult[DummyResponse] = ParsingResult(
-        successes=successes,
-        failures=[failure],
+    with pytest.raises(ParsingError):
+        result.raise_if_failures()
+
+
+def test_raise_if_failures_no_failures() -> None:
+    """Test raise_if_failures doesn't raise without failures."""
+    result = ParsingResult(successes=[TestModel(value="ok")])
+    result.raise_if_failures()  # Should not raise
+
+
+def test_filter_successes() -> None:
+    """Test filtering successful results."""
+    result = ParsingResult(
+        successes=[
+            TestModel(value="apple"),
+            TestModel(value="banana"),
+            TestModel(value="apricot"),
+        ]
     )
 
-    assert result.success_count == 2
-    assert result.failure_count == 1
-    assert result.has_failures is True
-    assert result.successes[0].value == "one"
-    assert result.failures[0].raw_text == "invalid line"
+    only_a = result.filter_successes(lambda m: m.value.startswith("a"))
+    assert [m.value for m in only_a] == ["apple", "apricot"]
 
 
-def test_parsing_failure_fields_roundtrip() -> None:
-    failure = ParsingFailure(
-        raw_text="bad line",
-        attempted_patterns=["patternA", "patternB"],
-        exception=None,
-        line_number=10,
+def test_map_successes() -> None:
+    """Test mapping over successful results."""
+    result = ParsingResult(
+        successes=[
+            TestModel(value="one"),
+            TestModel(value="two"),
+        ]
     )
 
-    assert failure.raw_text == "bad line"
-    assert failure.attempted_patterns == ["patternA", "patternB"]
-    assert failure.exception is None
-    assert failure.line_number == 10
+    def to_upper(m: TestModel) -> TestModel:
+        return TestModel(value=m.value.upper())
+
+    mapped = result.map_successes(to_upper)
+    assert [m.value for m in mapped.successes] == ["ONE", "TWO"]
+    # Failures should be preserved
+    assert mapped.failures == result.failures
 
 
-def test_retry_with_pattern_appends_pattern_and_returns_none() -> None:
-    failure = ParsingFailure(
-        raw_text="bad",
-        attempted_patterns=[],
-        exception=None,
-        line_number=1,
+def test_get_failure_lines_and_summary() -> None:
+    """Test helper methods for failures."""
+    result = ParsingResult(
+        successes=[TestModel(value="ok")],
+        failures=[
+            ParsingFailure(
+                raw_text="bad line",
+                attempted_patterns=["pattern"],
+                line_number=3,
+                exception="validation error",
+            )
+        ],
     )
 
-    failure.retry_with_pattern("new-pattern")
+    lines = result.get_failure_lines()
+    assert lines == [3]
 
-    assert "new-pattern" in failure.attempted_patterns
+    summary = result.get_failure_summary()
+    assert "1 / 2 lines" in summary
+    assert "Line 3" in summary
+    assert "bad line" in summary

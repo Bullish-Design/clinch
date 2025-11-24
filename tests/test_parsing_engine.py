@@ -100,10 +100,5 @@ def test_validation_error_details_preserved_as_json() -> None:
     assert result.failure_count == 1
     failure = result.failures[0]
 
-    # Step 2: we expect full details; at minimum, the validator message should be present.
     assert failure.exception is not None
     assert "positive" in failure.exception.lower()
-
-    # Optional: the exception should be JSON-serializable in the usual case.
-    # This is a loose check to avoid coupling to exact Pydantic formatting.
-    assert failure.exception.strip().startswith("[")

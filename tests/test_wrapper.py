@@ -20,7 +20,7 @@ class EchoWrapper(CLIWrapper):
 
 class StrictEchoWrapper(CLIWrapper):
     command = "echo"
-    strict_mode = True
+    strict_mode: bool = True
 
 
 class MissingWrapper(CLIWrapper):
@@ -130,7 +130,7 @@ def test_strict_mode_raises_on_parsing_failure() -> None:
 
     class StrictWrapper(CLIWrapper):
         command = "echo"
-        strict_mode = True
+        strict_mode: bool = True
 
     wrapper = StrictWrapper()
 
@@ -148,7 +148,7 @@ def test_permissive_mode_returns_result_with_failures() -> None:
 
     class PermissiveWrapper(CLIWrapper):
         command = "echo"
-        strict_mode = False
+        strict_mode: bool = False
 
     wrapper = PermissiveWrapper()
     result = wrapper._execute("invalid line", response_model=PartialResponse)
@@ -166,7 +166,7 @@ def test_timeout_raises_timeout_error() -> None:
 
     class SleepWrapper(CLIWrapper):
         command = "sleep"
-        timeout = 1
+        timeout: int = 1
 
     wrapper = SleepWrapper()
 
@@ -190,3 +190,39 @@ def test_preprocess_output_is_used_for_parsing() -> None:
     assert result.success_count == 1
     assert result.failure_count == 0
     assert result.successes[0].value == "TEST"
+
+def test_timeout_validation() -> None:
+    """CLIWrapper.timeout must be positive and not too large."""
+    from pydantic import ValidationError
+
+    class BadTimeoutWrapper(CLIWrapper):
+        command = "echo"
+        timeout: int = 0
+
+    with pytest.raises(ValidationError, match="timeout must be positive"):
+        BadTimeoutWrapper()
+
+    class TooLargeTimeoutWrapper(CLIWrapper):
+        command = "echo"
+        timeout: int = 10000
+
+    with pytest.raises(ValidationError, match="must not exceed 600 seconds"):
+        TooLargeTimeoutWrapper()
+
+
+def test_command_required() -> None:
+    """Wrapper must define command class variable."""
+    class NoCommandWrapper(CLIWrapper):
+        pass
+
+    with pytest.raises(TypeError, match="must define 'command'"):
+        NoCommandWrapper()
+
+
+def test_command_defined_works() -> None:
+    """Wrapper with command should instantiate successfully."""
+    class ValidWrapper(CLIWrapper):
+        command = "echo"
+
+    wrapper = ValidWrapper()
+    assert wrapper.command == "echo"

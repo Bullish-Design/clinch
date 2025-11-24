@@ -4,7 +4,7 @@ from __future__ import annotations
 import importlib
 from typing import Any, ClassVar, TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from clinch.base.error import BaseCLIError
 from clinch.base.response import BaseCLIResponse
@@ -33,13 +33,32 @@ class CLIWrapper(BaseModel):
 
     command: ClassVar[str]
     error_model: ClassVar[type[BaseCLIError]] = BaseCLIError
-    strict_mode: ClassVar[bool] = False
-    timeout: ClassVar[int] = 30
+
+    strict_mode: bool = False
+    timeout: int = 30
 
     model_config = {
         "arbitrary_types_allowed": True,
         "extra": "forbid",
+        "validate_assignment": True,
+        "validate_default": True,
     }
+
+    @field_validator("timeout")
+    @classmethod
+    def _validate_timeout(cls, value: int) -> int:
+        """Validate timeout configuration for the wrapper."""
+        if value <= 0:
+            raise ValueError("timeout must be positive")
+        if value > 600:
+            raise ValueError("timeout must not exceed 600 seconds")
+        return value
+
+    def model_post_init(self, __context: Any) -> None:  # type: ignore[override]
+        """Validate wrapper configuration after initialization."""
+        if not getattr(type(self), "command", None):
+            msg = f"{type(self).__name__} must define 'command' class variable"
+            raise TypeError(msg)
 
     def _build_positional_args(self, *args: Any) -> list[str]:
         """Convert positional arguments to their string representations."""
@@ -109,7 +128,7 @@ class CLIWrapper(BaseModel):
             cmd = _sh.Command(self.command)
             result = cmd(
                 *cli_args,
-                _timeout=type(self).timeout,
+                _timeout=self.timeout,
                 _err_to_out=False,
             )
         except Exception as exc:  # pragma: no cover - type-based dispatch
@@ -120,7 +139,7 @@ class CLIWrapper(BaseModel):
 
             if exc_type == "TimeoutException":
                 raise TimeoutError(
-                    f"Command '{command_str}' timed out after {type(self).timeout} seconds"
+                    f"Command '{command_str}' timed out after {self.timeout} seconds"
                 ) from exc
 
             if exc_type == "ErrorReturnCode" or exc_type.startswith("ErrorReturnCode_"):
@@ -152,6 +171,6 @@ class CLIWrapper(BaseModel):
         stdout_text = _to_text(stdout_value)
         preprocessed = self._preprocess_output(stdout_text)
         parse_result: ParsingResult[TResponse] = response_model.parse_output(preprocessed)
-        if type(self).strict_mode and parse_result.has_failures:
+        if self.strict_mode and parse_result.has_failures:
             raise ParsingError(parse_result.failures)
         return parse_result
