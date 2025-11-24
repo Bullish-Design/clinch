@@ -1,6 +1,8 @@
 # tests/test_wrapper.py
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from clinch import BaseCLIError, CommandNotFoundError
@@ -12,11 +14,11 @@ class DummyResponse(BaseCLIResponse):
     value: str = Field(pattern=r"value: (\w+)")
 
 
-class DefaultWrapper(CLIWrapper):
+class EchoWrapper(CLIWrapper):
     command = "echo"
 
 
-class StrictWrapper(CLIWrapper):
+class StrictEchoWrapper(CLIWrapper):
     command = "echo"
     strict_mode: bool = True
 
@@ -29,8 +31,12 @@ class FailWrapper(CLIWrapper):
     command = "ls"
 
 
+class TestWrapper(CLIWrapper):
+    command = "tool"
+
+
 def test_default_wrapper_configuration() -> None:
-    wrapper = DefaultWrapper()
+    wrapper = EchoWrapper()
     assert wrapper.command == "echo"
     assert wrapper.strict_mode is False
     assert wrapper.timeout == 30
@@ -38,38 +44,70 @@ def test_default_wrapper_configuration() -> None:
 
 
 def test_strict_wrapper_overrides_strict_mode_and_preserves_timeout_default() -> None:
-    wrapper = StrictWrapper()
+    wrapper = StrictEchoWrapper()
     assert wrapper.strict_mode is True
     assert wrapper.timeout == 30
 
 
-def test_build_args_includes_positional_and_keyword_arguments() -> None:
-    wrapper = DefaultWrapper()
-    args = wrapper._build_args("pos1", "pos2", flag=True, count=3, skip=False, optional=None)
+def test_build_args_none_values() -> None:
+    wrapper = TestWrapper()
+    args = wrapper._build_args(present="value", absent=None)
+    assert args == ["--present", "value"]
 
-    assert isinstance(args, list)
-    assert args[0:2] == ["pos1", "pos2"]
-    assert "--flag" in args
-    assert "--skip" not in args
-    assert "--optional" not in args
-    assert "--count" in args
-    count_index = args.index("--count")
-    assert args[count_index + 1] == "3"
+
+def test_build_args_list_values() -> None:
+    wrapper = TestWrapper()
+    args = wrapper._build_args(exclude=["a", "b", "c"])
+    assert args == ["--exclude", "a", "--exclude", "b", "--exclude", "c"]
+
+
+def test_build_args_numeric() -> None:
+    wrapper = TestWrapper()
+    args = wrapper._build_args(count=42, ratio=3.14)
+    assert args == ["--count", "42", "--ratio", "3.14"]
+
+
+def test_build_positional_args() -> None:
+    wrapper = TestWrapper()
+    args = wrapper._build_positional_args("one", 2, 3.5)
+    assert args == ["one", "2", "3.5"]
 
 
 def test_preprocess_output_is_noop_by_default() -> None:
-    wrapper = DefaultWrapper()
+    wrapper = EchoWrapper()
     text = "some output"
     assert wrapper._preprocess_output(text) == text
 
 
+def test_custom_build_args() -> None:
+    class CustomWrapper(CLIWrapper):
+        command = "tool"
+
+        def _build_args(self, **kwargs: Any) -> list[str]:
+            # Single-dash short flags
+            return [f"-{k[0]}" for k, v in kwargs.items() if v]
+
+    wrapper = CustomWrapper()
+    args = wrapper._build_args(verbose=True, quiet=True)
+    assert args == ["-v", "-q"]
+
+
 def test_execute_success_parses_output() -> None:
-    wrapper = DefaultWrapper()
+    wrapper = EchoWrapper()
     result = wrapper._execute("value: hello", response_model=DummyResponse)
 
     assert result.success_count == 1
     assert result.failure_count == 0
     assert result.successes[0].value == "hello"
+
+
+def test_execute_with_positional_args() -> None:
+    class TestResponse(BaseCLIResponse):
+        output: str = Field(pattern=r"(.+)")
+
+    wrapper = EchoWrapper()
+    result = wrapper._execute("test", "arg1", "arg2", response_model=TestResponse)
+    assert result.success_count == 1
 
 
 def test_execute_command_not_found_raises_command_not_found_error() -> None:
