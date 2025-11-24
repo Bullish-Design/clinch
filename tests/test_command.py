@@ -8,18 +8,18 @@ from clinch import Field
 from clinch.base import BaseCLICommand, BaseCLIResponse, CLIWrapper
 
 
-class TestResponse(BaseCLIResponse):
+class _TestResponse(BaseCLIResponse):
     value: str = Field(pattern=r"value: (\w+)")
 
 
 class SimpleCommand(BaseCLICommand):
     subcommand = "test"
-    response_model = TestResponse
+    response_model = _TestResponse
 
 
 class ParameterizedCommand(BaseCLICommand):
     subcommand = "test"
-    response_model = TestResponse
+    response_model = _TestResponse
 
     verbose: bool = False
     count: int = 10
@@ -43,7 +43,7 @@ def test_simple_command() -> None:
     """Test basic command creation."""
     cmd = SimpleCommand()
     assert cmd.build_args() == ["test"]
-    assert cmd.get_response_model() == TestResponse
+    assert cmd.get_response_model() == _TestResponse
 
 
 def test_parameterized_command() -> None:
@@ -63,7 +63,7 @@ def test_execute_command(monkeypatch: pytest.MonkeyPatch) -> None:
 
     class EchoCommand(BaseCLICommand):
         subcommand = "value: hello"
-        response_model = TestResponse
+        response_model = _TestResponse
 
     class TestWrapper(CLIWrapper):
         command = "echo"

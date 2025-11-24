@@ -12,7 +12,7 @@ class _TestModel(BaseModel):
 
 
 def test_empty_parsing_result_has_zero_counts_and_no_failures() -> None:
-    result: ParsingResult[TestModel] = ParsingResult()
+    result: ParsingResult[ _TestModel] = ParsingResult()
     assert result.success_count == 0
     assert result.failure_count == 0
     assert result.has_failures is False
@@ -26,7 +26,7 @@ def test_parsing_result_tracks_successes_and_failures() -> None:
         exception="error",
         line_number=10,
     )
-    result: ParsingResult[TestModel] = ParsingResult(
+    result: ParsingResult[ _TestModel] = ParsingResult(
         successes=[success],
         failures=[failure],
     )
@@ -60,7 +60,7 @@ def test_raise_if_failures_with_failures() -> None:
 
 
 def test_raise_if_failures_no_failures() -> None:
-    result = ParsingResult(successes=[TestModel(value="ok")])
+    result = ParsingResult(successes= [_TestModel(value="ok")])
     result.raise_if_failures()
 
 
@@ -95,7 +95,7 @@ def test_map_successes() -> None:
 
 def test_get_failure_lines_and_summary() -> None:
     result = ParsingResult(
-        successes=[TestModel(value="ok")],
+        successes= [_TestModel(value="ok")],
         failures=[
             ParsingFailure(
                 raw_text="bad line",
