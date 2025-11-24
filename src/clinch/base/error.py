@@ -2,133 +2,137 @@
 from __future__ import annotations
 
 import re
-from typing import Any, ClassVar, Dict, Type, TypeVar
+from typing import Any, ClassVar, Dict, Mapping
 
-from pydantic import Field
-from pydantic.dataclasses import dataclass
-from pydantic.fields import FieldInfo
+from pydantic import Field, dataclasses
 
+from clinch.base.response import _FieldPatternMapping
 from clinch.exceptions import CLInchException
 
-TError = TypeVar("TError", bound="BaseCLIError")
 
-
-class _ErrorFieldPatternsDescriptor:
-    """Descriptor that lazily computes regex patterns for error subclasses."""
-
-    _cache_attr = "__clinch_error_field_patterns__"
-
-    def __get__(self, instance: object, owner: type["BaseCLIError"] | None) -> Dict[str, str]:
-        if owner is None:
-            return {}
-
-        cached = owner.__dict__.get(self._cache_attr)
-        if isinstance(cached, dict):
-            return cached
-
-        merged: Dict[str, str] = {}
-        # Inherit patterns from base classes first
-        for base in owner.__mro__[1:]:
-            base_cached = getattr(base, self._cache_attr, None)
-            if isinstance(base_cached, dict):
-                merged.update(base_cached)
-
-        # Then add patterns defined directly on this class
-        merged.update(owner._extract_field_patterns())
-        setattr(owner, self._cache_attr, merged)
-        return merged
-
-
-@dataclass
+@dataclasses.dataclass(
+    config={
+        "arbitrary_types_allowed": True,
+        "extra": "ignore",
+    }
+)
 class BaseCLIError(CLInchException):
-    """Base error type for CLI failures."""
+    """Structured error information for failed CLI commands.
 
-    exit_code: int = Field(description="The command exit code")
-    stderr: str = Field(description="Standard error output")
-    stdout: str = Field(default="", description="Standard output")
-    command: str = Field(description="Executed command string")
+    This Pydantic dataclass also behaves as an exception type. It
+    captures key details about a failed command (exit code, stdout,
+    stderr, and the command string) while allowing subclasses to
+    declare additional pattern-based fields that are parsed from
+    stderr.
+    """
 
-    # Lazily-computed mapping: field name -> regex pattern
-    _field_patterns: ClassVar[Dict[str, str]] = _ErrorFieldPatternsDescriptor()
+    exit_code: int = Field(
+        description="Exit code returned by the CLI command",
+    )
+    stderr: str = Field(
+        description="Standard error output captured from the command",
+    )
+    stdout: str = Field(
+        default="",
+        description="Standard output captured from the command",
+    )
+    command: str = Field(
+        description="The executed command string",
+    )
+
+    # Lazy mapping of field name → regex pattern, inherited and cached.
+    _field_patterns: ClassVar[Mapping[str, str]] = _FieldPatternMapping()
 
     def __post_init__(self) -> None:
-        # pydantic validation has already run at this point
+        # Initialize the underlying exception message using __str__.
         CLInchException.__init__(self, str(self))
 
     def __str__(self) -> str:
-        stderr = self.stderr
-        if len(stderr) > 200:
-            stderr_preview = f"{stderr[:200]}..."
-        else:
-            stderr_preview = stderr
-        return f"Command '{self.command}' failed with exit code {self.exit_code}: {stderr_preview}"
+        stderr_preview = self.stderr
+        if len(stderr_preview) > 200:
+            stderr_preview = stderr_preview[:200] + "..."
+        return (
+            f"Command '{self.command}' failed with exit code {self.exit_code}: "
+            f"{stderr_preview}"
+        )
 
     @classmethod
     def _extract_field_patterns(cls) -> Dict[str, str]:
-        """Extract regex patterns from dataclass metadata and subclass Field declarations."""
+        """Extract regex patterns from this error class's fields only.
+
+        We support both the underlying Pydantic dataclass model fields
+        and subclass attributes that are declared using ``Field``.
+        """
         patterns: Dict[str, str] = {}
 
-        # Patterns from pydantic dataclass fields (BaseCLIError itself)
-        pyd_fields = getattr(cls, "__pydantic_fields__", {}) or {}
-        for name, field_info in pyd_fields.items():
-            extra = getattr(field_info, "json_schema_extra", None) or {}
-            pattern = extra.get("pattern")
-            if isinstance(pattern, str):
-                patterns[name] = pattern
+        # 1) Patterns from the generated Pydantic model (dataclass fields)
+        model = getattr(cls, "__pydantic_model__", None)
+        if model is not None:
+            for name, field in model.model_fields.items():
+                json_extra = field.json_schema_extra
+                if not json_extra:
+                    continue
+                value = json_extra.get("pattern")
+                if isinstance(value, str):
+                    patterns[name] = value
 
-        # Patterns from FieldInfo descriptors defined directly on subclasses
+        # 2) Patterns from subclass attributes declared directly on the class
+        from pydantic.fields import FieldInfo  # local import to avoid cycle
+
         for name, value in cls.__dict__.items():
             if isinstance(value, FieldInfo):
-                extra = value.json_schema_extra or {}
-                pattern = extra.get("pattern")
+                json_extra = value.json_schema_extra or {}
+                pattern = json_extra.get("pattern")
                 if isinstance(pattern, str):
-                    # Do not override any base-level pattern of the same name
                     patterns.setdefault(name, pattern)
 
         return patterns
 
     @classmethod
     def parse_from_stderr(
-        cls: Type[TError],
+        cls,
         stderr: str,
         exit_code: int,
         command: str,
         stdout: str = "",
-    ) -> TError:
-        """Parse stderr into a structured error instance.
+    ) -> "BaseCLIError":
+        """Parse stderr into an error instance.
 
-        Pattern-backed fields are populated from the stderr text.
+        This method scans ``stderr`` using the patterns declared on
+        the subclass (if any). For each pattern-backed field, the
+        first match is used to populate that field. When patterns do
+        not match, a valid error instance is still returned containing
+        the raw stderr and command metadata.
         """
-        base_kwargs: Dict[str, Any] = {
+        base_data: Dict[str, Any] = {
             "exit_code": exit_code,
             "stderr": stderr,
             "stdout": stdout,
             "command": command,
         }
 
-        # Instantiate base error first
-        error = cls(**base_kwargs)
+        extra_values: Dict[str, Any] = {}
 
-        # Skip core fields when applying regex patterns
-        patterns = {
-            name: pattern
-            for name, pattern in cls._field_patterns.items()
-            if name not in base_kwargs
-        }
+        patterns = dict(cls._field_patterns)
+        if patterns and stderr:
+            for field_name, pattern in patterns.items():
+                # Only treat fields that are not part of the base dataclass
+                if field_name in base_data:
+                    continue
+                match = re.search(pattern, stderr, re.MULTILINE)
+                if not match:
+                    continue
+                if match.groups():
+                    value: Any = match.group(1)
+                else:
+                    value = match.group(0)
+                extra_values[field_name] = value
 
-        if not patterns:
-            return error
+        # Construct the base dataclass instance first, then attach any
+        # extra parsed attributes so subclasses do not need to be
+        # decorated as dataclasses themselves.
+        instance = cls(**base_data)
+        for name, value in extra_values.items():
+            setattr(instance, name, value)
 
-        matched_values: Dict[str, Any] = {}
-        for field_name, pattern in patterns.items():
-            match = re.search(pattern, stderr)
-            if not match:
-                continue
-            value = match.group(1) if match.groups() else match.group(0)
-            matched_values[field_name] = value
-
-        # Attach matched values as attributes (works for subclass-only fields like error_code)
-        for name, value in matched_values.items():
-            setattr(error, name, value)
-
-        return error
+        return instance

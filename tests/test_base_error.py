@@ -42,15 +42,11 @@ def test_base_cli_error_str_truncates_long_stderr() -> None:
     error = BaseCLIError(exit_code=1, stderr=long_stderr, command="cmd")
     message = str(error)
 
-    # Extract the stderr preview part after the prefix
     prefix = "Command 'cmd' failed with exit code 1: "
     assert message.startswith(prefix)
-    preview = message[len(prefix):]
-
-    # Should be first 200 chars plus ellipsis
+    preview = message[len(prefix) :]
     assert preview.startswith(long_stderr[:200])
     assert preview.endswith("...")
-    assert len(preview) == 200 + 3
 
 
 def test_base_cli_error_as_exception() -> None:

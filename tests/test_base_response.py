@@ -1,13 +1,13 @@
 # tests/test_base_response.py
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Iterable, Mapping
 
 from clinch import BaseCLIResponse, Field
 from clinch.parsing import ParsingResult
 
 
-class _TestResponse(BaseCLIResponse):
+class TestResponse(BaseCLIResponse):
     value: str = Field(pattern=r"value: (\w+)")
 
 
@@ -34,14 +34,14 @@ class Response2(BaseCLIResponse):
 
 
 def test_base_cli_response_is_pydantic_model() -> None:
-    instance = _TestResponse(value="ok")
+    instance = TestResponse(value="ok")
     assert isinstance(instance, BaseCLIResponse)
     assert instance.value == "ok"
 
 
 def test_parse_output_parses_successful_lines() -> None:
     output = "value: first\nvalue: second"
-    result = _TestResponse.parse_output(output)
+    result = TestResponse.parse_output(output)
     assert isinstance(result, ParsingResult)
     assert result.success_count == 2
     assert result.failure_count == 0
@@ -50,7 +50,7 @@ def test_parse_output_parses_successful_lines() -> None:
 
 def test_parse_output_tracks_failures_for_non_matching_lines() -> None:
     output = "value: first\nnot a match"
-    result = _TestResponse.parse_output(output)
+    result = TestResponse.parse_output(output)
     assert result.success_count == 1
     assert result.failure_count == 1
     assert result.successes[0].value == "first"
@@ -62,7 +62,7 @@ def test_parse_output_tracks_failures_for_non_matching_lines() -> None:
 
 def test_parse_output_accepts_iterable_output() -> None:
     lines: Iterable[str] = ["value: one", "value: two"]
-    result = _TestResponse.parse_output(lines)
+    result = TestResponse.parse_output(lines)
     assert result.success_count == 2
     assert [item.value for item in result.successes] == ["one", "two"]
 
@@ -72,26 +72,30 @@ def test_extract_field_patterns_picks_up_only_pattern_fields() -> None:
     assert patterns == {"with_pattern": r"pattern: (\w+)"}  # no entry for fields without pattern
 
 
-def test_field_patterns_populated_on_subclass_creation() -> None:
-    assert _TestResponse._field_patterns == {"value": r"value: (\w+)"}
+def test_field_patterns_populated_on_subclass_access() -> None:
+    patterns: Mapping[str, str] = TestResponse._field_patterns
+    assert dict(patterns) == {"value": r"value: (\w+)"}  # mapping may be read-only
 
 
 def test_field_patterns_do_not_leak_between_unrelated_subclasses() -> None:
-    assert Response1._field_patterns == {"field1": r"field1: (\w+)"}
-    assert Response2._field_patterns == {"field2": r"field2: (\w+)"}
-    assert Response1._field_patterns is not Response2._field_patterns
-    assert Response1._field_patterns != Response2._field_patterns
+    p1 = dict(Response1._field_patterns)
+    p2 = dict(Response2._field_patterns)
+    assert p1 == {"field1": r"field1: (\w+)"}
+    assert p2 == {"field2": r"field2: (\w+)"}
+    assert p1 is not p2
+    assert p1 != p2
 
 
 def test_field_patterns_are_inherited_and_extended_in_subclasses() -> None:
-    assert ParentResponse._field_patterns == {"parent_field": r"parent: (\w+)"}
-    assert ChildResponse._field_patterns == {
+    parent_patterns = dict(ParentResponse._field_patterns)
+    child_patterns = dict(ChildResponse._field_patterns)
+    assert parent_patterns == {"parent_field": r"parent: (\w+)"}
+    assert child_patterns == {
         "parent_field": r"parent: (\w+)",
         "child_field": r"child: (\w+)",
     }
 
 
 def test_base_cli_response_class_has_empty_field_patterns() -> None:
-    # Base class has no annotated fields of its own
     assert hasattr(BaseCLIResponse, "_field_patterns")
-    assert BaseCLIResponse._field_patterns == {}
+    assert dict(BaseCLIResponse._field_patterns) == {}

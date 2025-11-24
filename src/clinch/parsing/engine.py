@@ -24,9 +24,8 @@ def parse_output(
 ) -> ParsingResult[TModel]:
     """Parse CLI output into instances of the given response model.
 
-    The model is expected to define a ``_field_patterns`` mapping of
-    field name → regex pattern, as populated by :class:`BaseCLIResponse`
-    or :class:`BaseCLIError`.
+    The model is expected to expose a ``_field_patterns`` mapping of
+    field name → regex pattern.
     """
     lines = _normalize_output(output)
     result: ParsingResult[TModel] = ParsingResult()
@@ -35,7 +34,6 @@ def parse_output(
 
     for index, raw_line in enumerate(lines, start=1):
         if not raw_line.strip():
-            # Skip empty lines without recording a failure.
             continue
 
         matched_values: Dict[str, Any] = {}

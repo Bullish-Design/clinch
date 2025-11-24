@@ -1,59 +1,59 @@
 # src/clinch/base/response.py
 from __future__ import annotations
 
-from typing import ClassVar, Dict, Iterable, TypeVar
+from typing import Any, ClassVar, Dict, Iterable, Mapping, TypeVar
 
 from pydantic import BaseModel
 
 from clinch.parsing import ParsingResult
 from clinch.parsing.engine import parse_output as _parse_output
 
+
 TResponse = TypeVar("TResponse", bound="BaseCLIResponse")
 
 
-class _FieldPatternsDescriptor:
-    """Descriptor that lazily computes field → pattern mappings per subclass."""
+class _FieldPatternMapping:
+    """Lazy descriptor that exposes field → regex pattern mappings."""
 
-    _cache_attr = "__clinch_field_patterns__"
+    def __set_name__(self, owner: type[object], name: str) -> None:
+        self._name = name
 
-    def __get__(self, instance: object, owner: type["BaseCLIResponse"] | None) -> Dict[str, str]:
+    def __get__(self, instance: Any, owner: type[object] | None = None) -> Mapping[str, str]:
         if owner is None:
-            return {}
+            owner = type(instance)
 
-        cached = owner.__dict__.get(self._cache_attr)
+        cache_name = f"__{self._name}_cache"
+        cached = owner.__dict__.get(cache_name)
         if isinstance(cached, dict):
             return cached
 
-        # Start with patterns from base classes
         merged: Dict[str, str] = {}
-        for base in owner.__mro__[1:]:
-            base_cached = getattr(base, self._cache_attr, None)
-            if isinstance(base_cached, dict):
-                merged.update(base_cached)
 
-        # Add/override with patterns from this class
-        merged.update(owner._extract_field_patterns())
+        for base in reversed(owner.__mro__):
+            extract = getattr(base, "_extract_field_patterns", None)
+            if extract is None or base is object:
+                continue
+            try:
+                patterns = extract()
+            except TypeError:
+                continue
+            if isinstance(patterns, dict):
+                merged.update(patterns)
 
-        setattr(owner, self._cache_attr, merged)
+        setattr(owner, cache_name, merged)
         return merged
 
 
 class BaseCLIResponse(BaseModel):
     """Base model for all CLI response types in CLInch."""
 
-    # Exposed as a descriptor so each subclass gets its own mapping, computed on first access.
-    _field_patterns: ClassVar[Dict[str, str]] = _FieldPatternsDescriptor()
+    _field_patterns: ClassVar[Mapping[str, str]] = _FieldPatternMapping()
 
     def __init_subclass__(cls, **kwargs: object) -> None:  # type: ignore[override]
-        """Ensure Pydantic's subclass initialisation still runs.
-
-        Pattern extraction is handled lazily by the descriptor.
-        """
         super().__init_subclass__(**kwargs)
 
     @classmethod
     def _extract_field_patterns(cls) -> Dict[str, str]:
-        """Extract regex patterns from model fields."""
         patterns: Dict[str, str] = {}
         for name, field in cls.model_fields.items():
             json_extra = field.json_schema_extra
@@ -68,6 +68,5 @@ class BaseCLIResponse(BaseModel):
     def parse_output(
         cls: type[TResponse],
         output: str | Iterable[str],
-    ) -> ParsingResult[TResponse]:
-        """Parse CLI output into response instances using the engine."""
+    ) -> ParsingResult[TResponse]:  # type: ignore[type-var]
         return _parse_output(cls, output)
