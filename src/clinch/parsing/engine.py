@@ -12,7 +12,6 @@ TModel = TypeVar("TModel", bound=BaseModel)
 
 
 def _normalize_output(output: str | Iterable[str]) -> List[str]:
-    """Normalize CLI output into a list of lines."""
     if isinstance(output, str):
         return output.splitlines()
     return list(output)
@@ -22,11 +21,6 @@ def parse_output(
     model: Type[TModel],
     output: str | Iterable[str],
 ) -> ParsingResult[TModel]:
-    """Parse CLI output into instances of the given response model.
-
-    The model is expected to expose a ``_field_patterns`` mapping of
-    field name → regex pattern.
-    """
     lines = _normalize_output(output)
     result: ParsingResult[TModel] = ParsingResult()
 

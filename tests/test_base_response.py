@@ -74,28 +74,26 @@ def test_extract_field_patterns_picks_up_only_pattern_fields() -> None:
 
 def test_field_patterns_populated_on_subclass_access() -> None:
     patterns: Mapping[str, str] = TestResponse._field_patterns
-    assert dict(patterns) == {"value": r"value: (\w+)"}  # mapping may be read-only
+    assert dict(patterns) == {"value": r"value: (\w+)"}  # lazily computed
 
 
 def test_field_patterns_do_not_leak_between_unrelated_subclasses() -> None:
-    p1 = dict(Response1._field_patterns)
-    p2 = dict(Response2._field_patterns)
-    assert p1 == {"field1": r"field1: (\w+)"}
-    assert p2 == {"field2": r"field2: (\w+)"}
-    assert p1 is not p2
-    assert p1 != p2
+    patterns1 = dict(Response1._field_patterns)
+    patterns2 = dict(Response2._field_patterns)
+    assert patterns1 == {"field1": r"field1: (\w+)"}
+    assert patterns2 == {"field2": r"field2: (\w+)"}
+    assert patterns1 is not patterns2
+    assert patterns1 != patterns2
 
 
 def test_field_patterns_are_inherited_and_extended_in_subclasses() -> None:
-    parent_patterns = dict(ParentResponse._field_patterns)
-    child_patterns = dict(ChildResponse._field_patterns)
-    assert parent_patterns == {"parent_field": r"parent: (\w+)"}
-    assert child_patterns == {
+    assert dict(ParentResponse._field_patterns) == {"parent_field": r"parent: (\w+)"}
+    assert dict(ChildResponse._field_patterns) == {
         "parent_field": r"parent: (\w+)",
         "child_field": r"child: (\w+)",
     }
 
 
 def test_base_cli_response_class_has_empty_field_patterns() -> None:
-    assert hasattr(BaseCLIResponse, "_field_patterns")
-    assert dict(BaseCLIResponse._field_patterns) == {}
+    patterns: Mapping[str, str] = BaseCLIResponse._field_patterns
+    assert dict(patterns) == {}

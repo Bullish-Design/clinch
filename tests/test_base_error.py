@@ -44,7 +44,7 @@ def test_base_cli_error_str_truncates_long_stderr() -> None:
 
     prefix = "Command 'cmd' failed with exit code 1: "
     assert message.startswith(prefix)
-    preview = message[len(prefix) :]
+    preview = message[len(prefix):]
     assert preview.startswith(long_stderr[:200])
     assert preview.endswith("...")
 

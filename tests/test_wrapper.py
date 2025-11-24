@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from clinch import BaseCLIError, CommandNotFoundError
+from clinch import BaseCLIError, CommandNotFoundError, ParsingError
 from clinch.base import BaseCLIResponse, CLIWrapper
 from clinch.fields import Field
 
@@ -84,7 +84,6 @@ def test_custom_build_args() -> None:
         command = "tool"
 
         def _build_args(self, **kwargs: Any) -> list[str]:
-            # Single-dash short flags
             return [f"-{k[0]}" for k, v in kwargs.items() if v]
 
     wrapper = CustomWrapper()
@@ -123,3 +122,39 @@ def test_execute_non_zero_exit_raises_error_model() -> None:
 
     assert exc_info.value.exit_code != 0
     assert "ls" in exc_info.value.command
+
+
+def test_strict_mode_raises_on_parsing_failure() -> None:
+    class PartialResponse(BaseCLIResponse):
+        value: str = Field(pattern=r"value: (\w+)")
+
+    class StrictWrapper(CLIWrapper):
+        command = "echo"
+        strict_mode: bool = True
+
+    wrapper = StrictWrapper()
+
+    with pytest.raises(ParsingError) as exc_info:
+        wrapper._execute("invalid line", response_model=PartialResponse)
+
+    error = exc_info.value
+    assert error.failures
+    assert error.failures[0].raw_text == "invalid line"
+
+
+def test_permissive_mode_returns_result_with_failures() -> None:
+    class PartialResponse(BaseCLIResponse):
+        value: str = Field(pattern=r"value: (\w+)")
+
+    class PermissiveWrapper(CLIWrapper):
+        command = "echo"
+        strict_mode: bool = False
+
+    wrapper = PermissiveWrapper()
+    result = wrapper._execute("invalid line", response_model=PartialResponse)
+
+    from clinch.parsing import ParsingResult  # local import to avoid circulars
+
+    assert isinstance(result, ParsingResult)
+    assert result.failure_count == 1
+    assert result.success_count == 0

@@ -8,12 +8,11 @@ from pydantic import BaseModel
 from clinch.parsing import ParsingResult
 from clinch.parsing.engine import parse_output as _parse_output
 
-
 TResponse = TypeVar("TResponse", bound="BaseCLIResponse")
 
 
 class _FieldPatternMapping:
-    """Lazy descriptor that exposes field → regex pattern mappings."""
+    """Descriptor that lazily computes field→pattern mappings per class."""
 
     def __set_name__(self, owner: type[object], name: str) -> None:
         self._name = name
@@ -68,5 +67,5 @@ class BaseCLIResponse(BaseModel):
     def parse_output(
         cls: type[TResponse],
         output: str | Iterable[str],
-    ) -> ParsingResult[TResponse]:  # type: ignore[type-var]
+    ) -> ParsingResult[TResponse]:
         return _parse_output(cls, output)
