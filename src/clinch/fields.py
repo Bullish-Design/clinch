@@ -3,26 +3,25 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import Field as _Field
+from pydantic import Field as PydanticField
+from pydantic_core import PydanticUndefined
 
 
 def Field(
-    default: Any = ...,
+    default: Any = PydanticUndefined,
     *,
     pattern: str | None = None,
-    json_schema_extra: dict[str, Any] | None = None,
     **kwargs: Any,
 ) -> Any:
-    """Wrapper around :func:`pydantic.Field` that stores a regex pattern.
+    """Create a Pydantic Field with optional regex pattern metadata.
 
-    The pattern is stored in ``json_schema_extra['pattern']`` so that
-    response and error models can discover it for parsing.
+    The pattern argument is stored in json_schema_extra under the
+    "pattern" key so the parsing engine can discover it later.
     """
-    extra: dict[str, Any] = dict(json_schema_extra or {})
+    json_schema_extra = dict(kwargs.pop("json_schema_extra", {}) or {})
+
     if pattern is not None:
-        extra["pattern"] = pattern
+        json_schema_extra["pattern"] = pattern
 
-    if extra:
-        kwargs["json_schema_extra"] = extra
-
-    return _Field(default, **kwargs)
+    json_schema_extra_arg: Any = json_schema_extra or None
+    return PydanticField(default, json_schema_extra=json_schema_extra_arg, **kwargs)

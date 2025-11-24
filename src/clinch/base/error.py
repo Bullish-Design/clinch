@@ -1,81 +1,47 @@
 # src/clinch/base/error.py
 from __future__ import annotations
 
-import re
-from typing import Any, ClassVar, Dict, Mapping
+from typing import Any, ClassVar, Dict, Self
 
-from pydantic import Field, dataclasses
+from pydantic import BaseModel, Field, create_model
 from pydantic.fields import FieldInfo
 
 from clinch.exceptions import CLInchException
+from clinch.parsing.engine import parse_output as _parse_output
 
 
-class _FieldPatternMapping:
-    """Lazy, MRO-aware mapping of field name → regex pattern for errors."""
-
-    def __set_name__(self, owner: type[object], name: str) -> None:
-        self._name = name
-
-    def __get__(self, instance: Any, owner: type[object] | None = None) -> Mapping[str, str]:
-        if owner is None:
-            owner = type(instance)
-
-        cache_name = f"__{self._name}_cache"
-        cached = owner.__dict__.get(cache_name)
-        if isinstance(cached, dict):
-            return cached
-
-        merged: Dict[str, str] = {}
-
-        for base in reversed(owner.__mro__):
-            extract = getattr(base, "_extract_field_patterns", None)
-            if extract is None or base is object:
-                continue
-            try:
-                patterns = extract()
-            except TypeError:
-                continue
-            if isinstance(patterns, dict):
-                merged.update(patterns)
-
-        setattr(owner, cache_name, merged)
-        return merged
-
-
-@dataclasses.dataclass(
-    config={
-        "arbitrary_types_allowed": True,
-        "extra": "ignore",
-    }
-)
 class BaseCLIError(CLInchException):
     """Structured error information for failed CLI commands.
 
-    This dataclass doubles as an exception type. It captures key
-    pieces of information about a failed command (exit code, stdout,
-    stderr, and the command string) while also allowing subclasses
-    to declare additional pattern-based fields that can be parsed
-    from stderr.
+    This class is an exception type and uses Pydantic models internally
+    for parsing stderr when subclasses declare pattern-based fields.
     """
 
-    exit_code: int = Field(
-        description="Exit code returned by the CLI command",
-    )
-    stderr: str = Field(
-        description="Standard error output captured from the command",
-    )
-    stdout: str = Field(
-        default="",
-        description="Standard output captured from the command",
-    )
-    command: str = Field(
-        description="The executed command string",
-    )
+    exit_code: int
+    stderr: str
+    stdout: str
+    command: str
 
-    _field_patterns: ClassVar[Mapping[str, str]] = _FieldPatternMapping()
+    _field_patterns: ClassVar[Dict[str, str]] = {}
 
-    def __post_init__(self) -> None:
-        CLInchException.__init__(self, str(self))
+    def __init__(
+        self,
+        *,
+        exit_code: int,
+        stderr: str,
+        stdout: str = "",
+        command: str,
+        **extra: Any,
+    ) -> None:
+        self.exit_code = exit_code
+        self.stderr = stderr
+        self.stdout = stdout
+        self.command = command
+
+        for name, value in extra.items():
+            setattr(self, name, value)
+
+        super().__init__(str(self))
 
     def __str__(self) -> str:
         stderr_preview = self.stderr
@@ -86,43 +52,39 @@ class BaseCLIError(CLInchException):
             f"{stderr_preview}"
         )
 
+    def __init_subclass__(cls, **kwargs: object) -> None:  # type: ignore[override]
+        """Populate ``_field_patterns`` for error subclasses.
+
+        We scan for :class:`FieldInfo` descriptors on the subclass, record
+        their regex patterns, and then *remove* those descriptors from the
+        class so that instances do not expose the attributes unless parsing
+        succeeds. Parsed values are attached to instances by ``__init__``
+        via the ``extra`` mapping.
+        """
+        super().__init_subclass__(**kwargs)
+
+        merged: Dict[str, str] = {}
+        for base in cls.__mro__[1:]:
+            patterns = getattr(base, "_field_patterns", None)
+            if isinstance(patterns, dict):
+                merged.update(patterns)
+
+        merged.update(cls._extract_field_patterns())
+        cls._field_patterns = merged
+
     @classmethod
     def _extract_field_patterns(cls) -> Dict[str, str]:
-        """Extract regex patterns from both the generated model and field attributes.
-
-        Also removes FieldInfo attributes from the class so that extra
-        fields do not appear on instances unless explicitly set by
-        ``parse_from_stderr``.
-        """
         patterns: Dict[str, str] = {}
-
-        # 1) From the generated Pydantic model for this dataclass.
-        model = getattr(cls, "__pydantic_model__", None)
-        if model is not None:
-            for name, field in model.model_fields.items():
-                extra = field.json_schema_extra
-                if not extra:
-                    continue
-                value = extra.get("pattern")
-                if isinstance(value, str):
-                    patterns[name] = value
-
-        # 2) From subclass attributes that are FieldInfo instances.
-        to_delete: list[str] = []
-        for name, value in cls.__dict__.items():
-            if isinstance(value, FieldInfo):
-                extra = value.json_schema_extra or {}
-                pattern = extra.get("pattern")
-                if isinstance(pattern, str):
-                    patterns.setdefault(name, pattern)
-                    to_delete.append(name)
-
-        for name in to_delete:
-            try:
-                delattr(cls, name)
-            except AttributeError:
-                pass
-
+        for name, value in list(cls.__dict__.items()):
+            if not isinstance(value, FieldInfo):
+                continue
+            json_extra = value.json_schema_extra or {}
+            pat = json_extra.get("pattern")
+            if isinstance(pat, str):
+                patterns[name] = pat
+            # Remove the descriptor so instances only get the attribute
+            # when we explicitly attach it via parsed data.
+            delattr(cls, name)
         return patterns
 
     @classmethod
@@ -132,38 +94,32 @@ class BaseCLIError(CLInchException):
         exit_code: int,
         command: str,
         stdout: str = "",
-    ) -> "BaseCLIError":
-        """Parse stderr into an error instance, populating pattern-based fields.
+    ) -> Self:
+        """Parse stderr into an error instance using pattern fields."""
+        pattern_fields = dict(cls._field_patterns)
+        pattern_data: Dict[str, Any] = {}
 
-        If no patterns match, the returned instance still contains the
-        raw stderr and command metadata.
-        """
-        base_data: Dict[str, Any] = {
+        if pattern_fields:
+            field_definitions: Dict[str, tuple[type[str], Any]] = {
+                name: (str, ...)
+                for name in pattern_fields
+            }
+            PatternModel = create_model(  # type: ignore[call-arg]
+                f"{cls.__name__}PatternModel",
+                **field_definitions,
+            )
+            setattr(PatternModel, "_field_patterns", pattern_fields)
+
+            parse_result = _parse_output(PatternModel, stderr)
+            if parse_result.successes:
+                pattern_instance = parse_result.successes[0]
+                pattern_data = pattern_instance.model_dump()
+
+        data: Dict[str, Any] = {
             "exit_code": exit_code,
             "stderr": stderr,
             "stdout": stdout,
             "command": command,
+            **pattern_data,
         }
-
-        extra_values: Dict[str, Any] = {}
-
-        patterns = dict(cls._field_patterns)
-        if patterns and stderr:
-            for field_name, pattern in patterns.items():
-                # Skip base fields to avoid overriding core metadata.
-                if field_name in base_data:
-                    continue
-                match = re.search(pattern, stderr, re.MULTILINE)
-                if not match:
-                    continue
-                if match.groups():
-                    value: Any = match.group(1)
-                else:
-                    value = match.group(0)
-                extra_values[field_name] = value
-
-        instance = cls(**base_data)
-        for name, value in extra_values.items():
-            setattr(instance, name, value)
-
-        return instance
+        return cls(**data)

@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from clinch import BaseCLIError, CommandNotFoundError, ParsingError
+from clinch import BaseCLIError, CommandNotFoundError, ParsingError, TimeoutError
 from clinch.base import BaseCLIResponse, CLIWrapper
 from clinch.fields import Field
 
@@ -20,7 +20,7 @@ class EchoWrapper(CLIWrapper):
 
 class StrictEchoWrapper(CLIWrapper):
     command = "echo"
-    strict_mode: bool = True
+    strict_mode = True
 
 
 class MissingWrapper(CLIWrapper):
@@ -31,7 +31,7 @@ class FailWrapper(CLIWrapper):
     command = "ls"
 
 
-class TestWrapper(CLIWrapper):
+class _TestWrapper(CLIWrapper):
     command = "tool"
 
 
@@ -50,27 +50,33 @@ def test_strict_wrapper_overrides_strict_mode_and_preserves_timeout_default() ->
 
 
 def test_build_args_none_values() -> None:
-    wrapper = TestWrapper()
+    wrapper = _TestWrapper()
     args = wrapper._build_args(present="value", absent=None)
     assert args == ["--present", "value"]
 
 
 def test_build_args_list_values() -> None:
-    wrapper = TestWrapper()
+    wrapper = _TestWrapper()
     args = wrapper._build_args(exclude=["a", "b", "c"])
     assert args == ["--exclude", "a", "--exclude", "b", "--exclude", "c"]
 
 
 def test_build_args_numeric() -> None:
-    wrapper = TestWrapper()
+    wrapper = _TestWrapper()
     args = wrapper._build_args(count=42, ratio=3.14)
     assert args == ["--count", "42", "--ratio", "3.14"]
 
 
 def test_build_positional_args() -> None:
-    wrapper = TestWrapper()
+    wrapper = _TestWrapper()
     args = wrapper._build_positional_args("one", 2, 3.5)
     assert args == ["one", "2", "3.5"]
+
+
+def test_preprocess_output_is_noop_by_default() -> None:
+    wrapper = EchoWrapper()
+    text = "some output"
+    assert wrapper._preprocess_output(text) == text
 
 
 def test_custom_build_args() -> None:
@@ -124,7 +130,7 @@ def test_strict_mode_raises_on_parsing_failure() -> None:
 
     class StrictWrapper(CLIWrapper):
         command = "echo"
-        strict_mode: bool = True
+        strict_mode = True
 
     wrapper = StrictWrapper()
 
@@ -142,7 +148,7 @@ def test_permissive_mode_returns_result_with_failures() -> None:
 
     class PermissiveWrapper(CLIWrapper):
         command = "echo"
-        strict_mode: bool = False
+        strict_mode = False
 
     wrapper = PermissiveWrapper()
     result = wrapper._execute("invalid line", response_model=PartialResponse)
@@ -152,3 +158,35 @@ def test_permissive_mode_returns_result_with_failures() -> None:
     assert isinstance(result, ParsingResult)
     assert result.failure_count == 1
     assert result.success_count == 0
+
+
+def test_timeout_raises_timeout_error() -> None:
+    class EmptyResponse(BaseCLIResponse):
+        pass
+
+    class SleepWrapper(CLIWrapper):
+        command = "sleep"
+        timeout = 1
+
+    wrapper = SleepWrapper()
+
+    with pytest.raises(TimeoutError):
+        wrapper._execute("2", response_model=EmptyResponse)
+
+
+def test_preprocess_output_is_used_for_parsing() -> None:
+    class PreprocessedResponse(BaseCLIResponse):
+        value: str = Field(pattern=r"VALUE: (\w+)")
+
+    class PreprocessingWrapper(CLIWrapper):
+        command = "echo"
+
+        def _preprocess_output(self, output: str) -> str:
+            return output.upper()
+
+    wrapper = PreprocessingWrapper()
+    result = wrapper._execute("value: test", response_model=PreprocessedResponse)
+
+    assert result.success_count == 1
+    assert result.failure_count == 0
+    assert result.successes[0].value == "TEST"

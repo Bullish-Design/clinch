@@ -2,72 +2,76 @@
 from __future__ import annotations
 
 import re
-from typing import Dict, Iterable, Mapping, TypeVar
+from typing import Any, Dict, Iterable, List, Type, TypeVar, cast
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
-from .result import ParsingFailure, ParsingResult
+from clinch.parsing import ParsingFailure, ParsingResult
 
 TModel = TypeVar("TModel", bound=BaseModel)
 
 
+def _normalize_output(output: str | Iterable[str]) -> List[str]:
+    """Normalize CLI output into a list of lines."""
+    if isinstance(output, str):
+        return output.splitlines()
+    return list(output)
+
+
 def parse_output(
-    model: type[TModel],
+    model: Type[TModel],
     output: str | Iterable[str],
 ) -> ParsingResult[TModel]:
-    if isinstance(output, str):
-        lines = output.splitlines()
-    else:
-        lines = list(output)
+    """Parse CLI output into instances of the given response model."""
+    lines = _normalize_output(output)
+    result: ParsingResult[TModel] = ParsingResult()
 
-    patterns: Mapping[str, str] = getattr(model, "_field_patterns", {})  # type: ignore[attr-defined]
-    pattern_items = list(patterns.items())
-    attempted_patterns_all = [p for _, p in pattern_items]
+    patterns = cast(Dict[str, str], getattr(model, "_field_patterns", {}) or {})
 
-    successes: list[TModel] = []
-    failures: list[ParsingFailure] = []
-
-    for idx, line in enumerate(lines, start=1):
-        # Skip completely empty/whitespace-only lines without creating failures
-        if not line.strip():
+    for index, raw_line in enumerate(lines, start=1):
+        if not raw_line.strip():
             continue
 
-        data: Dict[str, str] = {}
-        matched_any = False
+        matched_values: Dict[str, Any] = {}
+        attempted_patterns: List[str] = []
 
-        for field_name, pattern in pattern_items:
-            match = re.search(pattern, line)
+        for field_name, pattern in patterns.items():
+            attempted_patterns.append(pattern)
+            match = re.search(pattern, raw_line)
             if not match:
                 continue
-            matched_any = True
-            if match.groups():
-                data[field_name] = match.group(1)
-            else:
-                data[field_name] = match.group(0)
 
-        if matched_any:
-            try:
-                instance = model.model_validate(data)
-            except Exception as exc:
-                failures.append(
-                    ParsingFailure(
-                        raw_text=line,
-                        line_number=idx,
-                        attempted_patterns=list(attempted_patterns_all),
-                        exception=exc,
-                        message=str(exc),
-                    )
-                )
+            if match.groups():
+                value: Any = match.group(1)
             else:
-                successes.append(instance)
-        else:
-            failures.append(
+                value = match.group(0)
+
+            matched_values[field_name] = value
+
+        if not matched_values:
+            result.failures.append(
                 ParsingFailure(
-                    raw_text=line,
-                    line_number=idx,
-                    attempted_patterns=list(attempted_patterns_all),
-                    message="No patterns matched",
+                    raw_text=raw_line,
+                    attempted_patterns=list(attempted_patterns),
+                    exception=None,
+                    line_number=index,
                 )
             )
+            continue
 
-    return ParsingResult[TModel](successes=successes, failures=failures)
+        try:
+            instance = model(**matched_values)
+        except ValidationError as exc:
+            result.failures.append(
+                ParsingFailure(
+                    raw_text=raw_line,
+                    attempted_patterns=list(attempted_patterns),
+                    exception=str(exc),
+                    line_number=index,
+                )
+            )
+            continue
+
+        result.successes.append(instance)
+
+    return result

@@ -1,38 +1,37 @@
 # src/clinch/parsing/result.py
 from __future__ import annotations
 
-from typing import Any, Generic, Iterable, List, TypeVar
+from typing import Generic, TypeVar
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
-TModel = TypeVar("TModel")
+from clinch.fields import Field
+
+T = TypeVar("T")
 
 
 class ParsingFailure(BaseModel):
-    raw_text: str
-    line_number: int
-    attempted_patterns: List[str] = Field(default_factory=list)
-    exception: Any | None = None
-    pattern_name: str | None = None
-    pattern: str | None = None
-    message: str | None = None
+    """Details about a single parsing failure."""
 
-    model_config = {
-        "arbitrary_types_allowed": True,
-    }
+    raw_text: str = Field(description="Original line that failed to parse")
+    attempted_patterns: list[str] = Field(description="Regex patterns that were tried")
+    exception: str | None = Field(default=None, description="Exception message if any")
+    line_number: int = Field(description="Line number in output (1-indexed)")
 
     def retry_with_pattern(self, pattern: str) -> None:
-        """Record an additional pattern we tried when re-parsing this line."""
+        """Record an additional attempted pattern."""
         self.attempted_patterns.append(pattern)
 
 
-class ParsingResult(Generic[TModel], BaseModel):
-    successes: List[TModel] = Field(default_factory=list)
-    failures: List[ParsingFailure] = Field(default_factory=list)
+class ParsingResult(BaseModel, Generic[T]):
+    """Container for parsing results with success/failure tracking."""
 
-    model_config = {
-        "arbitrary_types_allowed": True,
-    }
+    successes: list[T] = Field(default_factory=list, description="Successfully parsed instances")
+    failures: list[ParsingFailure] = Field(default_factory=list, description="Failed parsing attempts")
+
+    @property
+    def has_failures(self) -> bool:
+        return len(self.failures) > 0
 
     @property
     def success_count(self) -> int:
@@ -41,13 +40,3 @@ class ParsingResult(Generic[TModel], BaseModel):
     @property
     def failure_count(self) -> int:
         return len(self.failures)
-
-    @property
-    def has_failures(self) -> bool:
-        return bool(self.failures)
-
-    def iter_successes(self) -> Iterable[TModel]:
-        return iter(self.successes)
-
-    def iter_failures(self) -> Iterable[ParsingFailure]:
-        return iter(self.failures)

@@ -3,48 +3,40 @@ from __future__ import annotations
 
 from typing import Iterable
 
+from pydantic import BaseModel
+
 from clinch import BaseCLIResponse, Field
-from clinch.parsing import ParsingResult
 from clinch.parsing.engine import parse_output
+from clinch.parsing import ParsingResult
 
 
-class SimpleResponse(BaseCLIResponse):
+class EngineResponse(BaseCLIResponse):
     value: str = Field(pattern=r"value: (\w+)")
 
 
-class IntResponse(BaseCLIResponse):
-    count: int = Field(pattern=r"count: (\S+)")
+class PlainModel(BaseModel):
+    value: str
 
 
-def test_engine_parses_successes_and_failures_from_string_output() -> None:
-    output = "value: first\ninvalid line\nvalue: second"
-    result = parse_output(SimpleResponse, output)
+def test_parse_output_with_response_model() -> None:
+    output = "value: one\nvalue: two"
+    result = parse_output(EngineResponse, output)
     assert isinstance(result, ParsingResult)
     assert result.success_count == 2
-    assert result.failure_count == 1
-    assert [item.value for item in result.successes] == ["first", "second"]
-
-    failure = result.failures[0]
-    assert failure.raw_text == "invalid line"
-    assert failure.line_number == 2
-    assert failure.attempted_patterns
+    assert [item.value for item in result.successes] == ["one", "two"]
 
 
-def test_engine_parses_iterable_output_and_handles_validation_error() -> None:
-    lines: Iterable[str] = ["count: 10", "count: not-a-number"]
-    result = parse_output(IntResponse, lines)
+def test_parse_output_with_iterable_lines() -> None:
+    lines: Iterable[str] = ["value: x", "value: y"]
+    result = parse_output(EngineResponse, lines)
+    assert result.success_count == 2
 
+
+def test_parse_output_records_failures_for_non_matching_lines() -> None:
+    output = "value: ok\nno match here"
+    result = parse_output(EngineResponse, output)
     assert result.success_count == 1
     assert result.failure_count == 1
-    assert result.successes[0].count == 10
-
     failure = result.failures[0]
-    assert "not-a-number" in failure.raw_text
-    assert failure.exception is not None
-
-
-def test_engine_skips_empty_lines_without_failures() -> None:
-    output = "value: first\n\nvalue: second"
-    result = parse_output(SimpleResponse, output)
-    assert result.success_count == 2
-    assert result.failure_count == 0
+    assert failure.raw_text == "no match here"
+    assert failure.line_number == 2

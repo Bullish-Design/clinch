@@ -1,7 +1,12 @@
 # src/clinch/__init__.py
 from __future__ import annotations
 
-"""CLInch public API."""
+"""CLInch public API.
+
+This module exposes the main entry points for users of the library:
+custom fields, parsing results, core base classes, and the exception
+hierarchy.
+"""
 
 from .base import BaseCLIError, BaseCLIResponse, CLIWrapper
 from .exceptions import CLInchException, CommandNotFoundError, ParsingError, TimeoutError

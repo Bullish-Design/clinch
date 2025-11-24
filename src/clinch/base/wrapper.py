@@ -17,18 +17,24 @@ _sh = importlib.import_module("sh")
 
 
 def _to_text(value: Any) -> str:
+    """Return value as a text string, decoding bytes if necessary."""
     if isinstance(value, (bytes, bytearray)):
         return value.decode()
     return str(value)
 
 
 class CLIWrapper(BaseModel):
-    """Base class for wrapping CLI tools."""
+    """Base class for wrapping CLI tools.
+
+    Subclasses typically set command and may override strict_mode,
+    timeout, or provide a custom error_model. Command execution is
+    implemented via sh.
+    """
 
     command: ClassVar[str]
     error_model: ClassVar[type[BaseCLIError]] = BaseCLIError
-    strict_mode: bool = False
-    timeout: int = 30
+    strict_mode: ClassVar[bool] = False
+    timeout: ClassVar[int] = 30
 
     model_config = {
         "arbitrary_types_allowed": True,
@@ -36,16 +42,24 @@ class CLIWrapper(BaseModel):
     }
 
     def _build_positional_args(self, *args: Any) -> list[str]:
+        """Convert positional arguments to their string representations."""
         return [str(arg) for arg in args]
 
     def _build_args(self, **kwargs: Any) -> list[str]:
+        """Convert keyword arguments into a flat list of CLI arguments.
+
+        * None values are skipped.
+        * Boolean True -> --flag, False -> omitted.
+        * List values are expanded: exclude=["a", "b"] becomes
+          --exclude a --exclude b.
+        * Other values become --key value.
+        """
         args: list[str] = []
         for key, value in kwargs.items():
             if value is None:
                 continue
 
             flag = f"--{key.replace('_', '-')}"
-
             if isinstance(value, bool):
                 if value:
                     args.append(flag)
@@ -58,12 +72,24 @@ class CLIWrapper(BaseModel):
         return args
 
     def _preprocess_output(self, output: str) -> str:
+        """Hook for normalizing raw stdout before parsing.
+
+        Common use cases include:
+
+        * Stripping ANSI color codes, e.g. using a pattern like
+          r"\\x1b[[0-9;]*m" with re.sub.
+        * Removing headers or footers that appear before/after real data.
+        * Normalizing whitespace or line endings before the parsing engine
+          runs.
+        """
         return output
 
     def _get_error_model(self) -> type[BaseCLIError]:
+        """Return the error model class used for failures."""
         return self.error_model
 
     def _build_command_string(self, args: list[str]) -> str:
+        """Return a human-readable command string for error messages."""
         parts = [self.command, *args]
         return " ".join(parts)
 
@@ -73,6 +99,7 @@ class CLIWrapper(BaseModel):
         response_model: type[TResponse],
         **kwargs: Any,
     ) -> ParsingResult[TResponse]:
+        """Execute the CLI command and parse its output."""
         positional_args = self._build_positional_args(*args)
         keyword_args = self._build_args(**kwargs)
         cli_args: list[str] = [*positional_args, *keyword_args]
@@ -82,23 +109,21 @@ class CLIWrapper(BaseModel):
             cmd = _sh.Command(self.command)
             result = cmd(
                 *cli_args,
-                _timeout=self.timeout,
+                _timeout=type(self).timeout,
                 _err_to_out=False,
             )
-        except Exception as exc:  # pragma: no cover
-            CommandNotFound = getattr(_sh, "CommandNotFound", type(exc))
-            TimeoutException = getattr(_sh, "TimeoutException", type(exc))
-            ErrorReturnCode = getattr(_sh, "ErrorReturnCode", type(exc))
+        except Exception as exc:  # pragma: no cover - type-based dispatch
+            exc_type = type(exc).__name__
 
-            if isinstance(exc, CommandNotFound):
+            if exc_type == "CommandNotFound":
                 raise CommandNotFoundError(str(exc)) from exc
 
-            if isinstance(exc, TimeoutException):
+            if exc_type == "TimeoutException":
                 raise TimeoutError(
-                    f"Command '{command_str}' timed out after {self.timeout} seconds"
+                    f"Command '{command_str}' timed out after {type(self).timeout} seconds"
                 ) from exc
 
-            if isinstance(exc, ErrorReturnCode):
+            if exc_type == "ErrorReturnCode" or exc_type.startswith("ErrorReturnCode_"):
                 exit_code = getattr(exc, "exit_code", 1)
                 stdout_text = _to_text(getattr(exc, "stdout", ""))
                 stderr_text = _to_text(getattr(exc, "stderr", ""))
@@ -127,6 +152,6 @@ class CLIWrapper(BaseModel):
         stdout_text = _to_text(stdout_value)
         preprocessed = self._preprocess_output(stdout_text)
         parse_result: ParsingResult[TResponse] = response_model.parse_output(preprocessed)
-        if self.strict_mode and parse_result.has_failures:
+        if type(self).strict_mode and parse_result.has_failures:
             raise ParsingError(parse_result.failures)
         return parse_result

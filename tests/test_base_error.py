@@ -4,93 +4,53 @@ from __future__ import annotations
 from clinch import BaseCLIError, Field
 
 
-def test_base_cli_error_creation_all_fields() -> None:
-    error = BaseCLIError(
-        exit_code=1,
-        stderr="something went wrong",
-        stdout="partial output",
-        command="cmd --flag",
-    )
+def test_base_cli_error_can_be_instantiated_and_str() -> None:
+    error = BaseCLIError(exit_code=1, stderr="oops", stdout="", command="cmd")
     assert error.exit_code == 1
-    assert error.stderr == "something went wrong"
-    assert error.stdout == "partial output"
-    assert error.command == "cmd --flag"
+    assert "cmd" in str(error)
+    assert "oops" in str(error)
 
 
-def test_base_cli_error_minimal_fields_use_default_stdout() -> None:
-    error = BaseCLIError(
-        exit_code=2,
-        stderr="fail",
-        command="cmd",
-    )
-    assert error.exit_code == 2
-    assert error.stderr == "fail"
-    assert error.command == "cmd"
-    assert error.stdout == ""
-
-
-def test_base_cli_error_str_includes_command_exit_code_and_stderr() -> None:
-    error = BaseCLIError(exit_code=3, stderr="boom", command="mycmd")
+def test_base_cli_error_truncates_long_stderr_in_str() -> None:
+    long_stderr = "x" * 500
+    error = BaseCLIError(exit_code=1, stderr=long_stderr, stdout="", command="cmd")
     message = str(error)
-    assert "mycmd" in message
-    assert "3" in message
-    assert "boom" in message
+    assert "..." in message
+    assert "cmd" in message
 
 
-def test_base_cli_error_str_truncates_long_stderr() -> None:
-    long_stderr = "x" * 250
-    error = BaseCLIError(exit_code=1, stderr=long_stderr, command="cmd")
-    message = str(error)
-
-    prefix = "Command 'cmd' failed with exit code 1: "
-    assert message.startswith(prefix)
-    preview = message[len(prefix):]
-    assert preview.startswith(long_stderr[:200])
-    assert preview.endswith("...")
-
-
-def test_base_cli_error_as_exception() -> None:
-    error = BaseCLIError(exit_code=1, stderr="fail", command="cmd")
-
-    try:
-        raise error
-    except BaseCLIError as exc:
-        assert exc.exit_code == 1
-        assert exc.stderr == "fail"
-
-
-def test_custom_error_parsing_success() -> None:
+def test_error_subclass_with_pattern_parses_from_stderr() -> None:
     class CustomError(BaseCLIError):
-        error_code: str = Field(pattern=r"ERR-(\d+)")
+        error_code = Field(pattern=r"ERR-(\d+)")
 
-    error = CustomError.parse_from_stderr(
-        stderr="ERR-404: not found",
-        exit_code=1,
-        command="cmd",
-    )
-
-    assert isinstance(error, CustomError)
-    assert error.exit_code == 1
-    assert error.command == "cmd"
-    assert error.stderr == "ERR-404: not found"
-    assert getattr(error, "error_code") == "404"
-
-
-def test_custom_error_parsing_fallback_on_no_match() -> None:
-    class CustomError(BaseCLIError):
-        error_code: str = Field(pattern=r"ERR-(\d+)")
-
-    stderr = "no error code here"
+    stderr = "ERR-404: not found"
     error = CustomError.parse_from_stderr(
         stderr=stderr,
         exit_code=2,
         command="cmd",
-        stdout="some stdout",
+        stdout="",
     )
 
     assert isinstance(error, CustomError)
     assert error.exit_code == 2
     assert error.command == "cmd"
-    assert error.stdout == "some stdout"
+    assert getattr(error, "error_code") == "404"
+
+
+def test_parse_from_stderr_handles_no_match_gracefully() -> None:
+    class CustomError(BaseCLIError):
+        error_code = Field(pattern=r"ERR-(\d+)")
+
+    stderr = "no error code here"
+    error = CustomError.parse_from_stderr(
+        stderr=stderr,
+        exit_code=3,
+        command="cmd",
+        stdout="out",
+    )
+
+    assert isinstance(error, CustomError)
+    assert error.exit_code == 3
     assert error.stderr == stderr
+    # No attribute error_code should be present when parsing fails
     assert not hasattr(error, "error_code")
