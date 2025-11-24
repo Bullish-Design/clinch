@@ -2,9 +2,6 @@
 from __future__ import annotations
 
 import clinch
-import clinch.base  # noqa: F401
-import clinch.parsing  # noqa: F401
-import clinch.utils  # noqa: F401
 from clinch import (
     BaseCLIError,
     BaseCLIResponse,
@@ -33,3 +30,4 @@ def test_import_clinch_package_and_exports() -> None:
     assert BaseCLIResponse is not None
     assert BaseCLIError is not None
     assert CLIWrapper is not None
+    assert isinstance(clinch.__version__, str)

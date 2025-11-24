@@ -126,7 +126,7 @@ class CLIWrapper(BaseModel):
         stdout_value = getattr(result, "stdout", result)
         stdout_text = _to_text(stdout_value)
         preprocessed = self._preprocess_output(stdout_text)
-        result: ParsingResult[TResponse] = response_model.parse_output(preprocessed)
-        if self.strict_mode and result.has_failures:
-            raise ParsingError(result.failures)
-        return result
+        parse_result: ParsingResult[TResponse] = response_model.parse_output(preprocessed)
+        if self.strict_mode and parse_result.has_failures:
+            raise ParsingError(parse_result.failures)
+        return parse_result

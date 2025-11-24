@@ -12,7 +12,7 @@ TResponse = TypeVar("TResponse", bound="BaseCLIResponse")
 
 
 class _FieldPatternMapping:
-    """Descriptor that lazily computes field→pattern mappings per class."""
+    """Lazy, MRO-aware mapping of field name → regex pattern."""
 
     def __set_name__(self, owner: type[object], name: str) -> None:
         self._name = name
@@ -67,5 +67,5 @@ class BaseCLIResponse(BaseModel):
     def parse_output(
         cls: type[TResponse],
         output: str | Iterable[str],
-    ) -> ParsingResult[TResponse]:
+    ) -> ParsingResult[TResponse]:  # type: ignore[type-var]
         return _parse_output(cls, output)

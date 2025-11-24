@@ -5,12 +5,13 @@ import re
 from typing import Any, ClassVar, Dict, Mapping
 
 from pydantic import Field, dataclasses
+from pydantic.fields import FieldInfo
 
 from clinch.exceptions import CLInchException
 
 
 class _FieldPatternMapping:
-    """Descriptor that lazily computes field→pattern mappings per class."""
+    """Lazy, MRO-aware mapping of field name → regex pattern for errors."""
 
     def __set_name__(self, owner: type[object], name: str) -> None:
         self._name = name
@@ -26,12 +27,14 @@ class _FieldPatternMapping:
 
         merged: Dict[str, str] = {}
 
-        extract = getattr(owner, "_extract_field_patterns", None)
-        if extract is not None:
+        for base in reversed(owner.__mro__):
+            extract = getattr(base, "_extract_field_patterns", None)
+            if extract is None or base is object:
+                continue
             try:
                 patterns = extract()
             except TypeError:
-                patterns = None
+                continue
             if isinstance(patterns, dict):
                 merged.update(patterns)
 
@@ -46,7 +49,14 @@ class _FieldPatternMapping:
     }
 )
 class BaseCLIError(CLInchException):
-    """Structured error information for failed CLI commands."""
+    """Structured error information for failed CLI commands.
+
+    This dataclass doubles as an exception type. It captures key
+    pieces of information about a failed command (exit code, stdout,
+    stderr, and the command string) while also allowing subclasses
+    to declare additional pattern-based fields that can be parsed
+    from stderr.
+    """
 
     exit_code: int = Field(
         description="Exit code returned by the CLI command",
@@ -64,7 +74,7 @@ class BaseCLIError(CLInchException):
 
     _field_patterns: ClassVar[Mapping[str, str]] = _FieldPatternMapping()
 
-    def __post_init__(self) -> None:  # type: ignore[override]
+    def __post_init__(self) -> None:
         CLInchException.__init__(self, str(self))
 
     def __str__(self) -> str:
@@ -78,11 +88,18 @@ class BaseCLIError(CLInchException):
 
     @classmethod
     def _extract_field_patterns(cls) -> Dict[str, str]:
+        """Extract regex patterns from both the generated model and field attributes.
+
+        Also removes FieldInfo attributes from the class so that extra
+        fields do not appear on instances unless explicitly set by
+        ``parse_from_stderr``.
+        """
         patterns: Dict[str, str] = {}
 
+        # 1) From the generated Pydantic model for this dataclass.
         model = getattr(cls, "__pydantic_model__", None)
         if model is not None:
-            for name, field in model.model_fields.items():  # type: ignore[attr-defined]
+            for name, field in model.model_fields.items():
                 extra = field.json_schema_extra
                 if not extra:
                     continue
@@ -90,17 +107,21 @@ class BaseCLIError(CLInchException):
                 if isinstance(value, str):
                     patterns[name] = value
 
-        try:
-            from pydantic.fields import FieldInfo
-        except Exception:  # pragma: no cover
-            return patterns
-
+        # 2) From subclass attributes that are FieldInfo instances.
+        to_delete: list[str] = []
         for name, value in cls.__dict__.items():
             if isinstance(value, FieldInfo):
                 extra = value.json_schema_extra or {}
                 pattern = extra.get("pattern")
                 if isinstance(pattern, str):
                     patterns.setdefault(name, pattern)
+                    to_delete.append(name)
+
+        for name in to_delete:
+            try:
+                delattr(cls, name)
+            except AttributeError:
+                pass
 
         return patterns
 
@@ -111,7 +132,12 @@ class BaseCLIError(CLInchException):
         exit_code: int,
         command: str,
         stdout: str = "",
-    ) -> BaseCLIError:
+    ) -> "BaseCLIError":
+        """Parse stderr into an error instance, populating pattern-based fields.
+
+        If no patterns match, the returned instance still contains the
+        raw stderr and command metadata.
+        """
         base_data: Dict[str, Any] = {
             "exit_code": exit_code,
             "stderr": stderr,
@@ -124,9 +150,9 @@ class BaseCLIError(CLInchException):
         patterns = dict(cls._field_patterns)
         if patterns and stderr:
             for field_name, pattern in patterns.items():
+                # Skip base fields to avoid overriding core metadata.
                 if field_name in base_data:
                     continue
-
                 match = re.search(pattern, stderr, re.MULTILINE)
                 if not match:
                     continue

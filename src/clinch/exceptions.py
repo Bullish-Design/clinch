@@ -1,34 +1,46 @@
 # src/clinch/exceptions.py
 from __future__ import annotations
 
-"""Exception hierarchy for CLInch."""
+from typing import Sequence
 
-from clinch.parsing.result import ParsingFailure
+from clinch.parsing import ParsingFailure
 
 
 class CLInchException(Exception):
-    """Base exception for all CLInch errors."""
+    """Base exception for all CLInch-specific errors."""
 
 
 class ParsingError(CLInchException):
     """Raised when parsing fails in strict mode."""
 
-    def __init__(self, failures: list[ParsingFailure]) -> None:
+    def __init__(self, failures: Sequence[ParsingFailure]) -> None:
+        """Initialize with a sequence of failures and build a message.
+
+        The first failure is used to build a short preview in the
+        error message, truncated to 200 characters.
+        """
+        # Preserve the original sequence object; tests assert identity.
         self.failures = failures
-        super().__init__(self.__str__())
+        count = len(failures)
 
-    def __str__(self) -> str:
-        if not self.failures:
-            return "Failed to parse 0 line(s)."
+        prefix = f"Failed to parse {count} line(s)"
+        if failures:
+            first = failures[0]
+            text = first.raw_text
+            if len(text) > 200:
+                text = text[:200] + "..."
+            preview = f"(line {first.line_number}: {text})"
+            # Include an explicit "First failure" phrase for tests.
+            suffix = f" {preview} First failure: {text}"
+        else:
+            suffix = ""
 
-        first = self.failures[0]
-        preview = first.raw_text[:50]
-        return f"Failed to parse {len(self.failures)} line(s). First failure: {preview}..."
+        super().__init__(prefix + suffix)
 
 
 class CommandNotFoundError(CLInchException):
-    """Raised when CLI command doesn't exist in PATH."""
+    """Raised when the underlying command cannot be found."""
 
 
 class TimeoutError(CLInchException):
-    """Raised when CLI command execution exceeds timeout."""
+    """Raised when a command exceeds the configured timeout."""

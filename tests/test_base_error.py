@@ -73,7 +73,7 @@ def test_custom_error_parsing_success() -> None:
     assert error.exit_code == 1
     assert error.command == "cmd"
     assert error.stderr == "ERR-404: not found"
-    assert error.error_code == "404"
+    assert getattr(error, "error_code") == "404"
 
 
 def test_custom_error_parsing_fallback_on_no_match() -> None:
@@ -93,3 +93,4 @@ def test_custom_error_parsing_fallback_on_no_match() -> None:
     assert error.command == "cmd"
     assert error.stdout == "some stdout"
     assert error.stderr == stderr
+    assert not hasattr(error, "error_code")

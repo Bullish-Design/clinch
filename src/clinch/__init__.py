@@ -22,3 +22,5 @@ __all__ = [
     "BaseCLIError",
     "CLIWrapper",
 ]
+
+__version__ = "0.1.0"

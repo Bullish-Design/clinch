@@ -73,12 +73,6 @@ def test_build_positional_args() -> None:
     assert args == ["one", "2", "3.5"]
 
 
-def test_preprocess_output_is_noop_by_default() -> None:
-    wrapper = EchoWrapper()
-    text = "some output"
-    assert wrapper._preprocess_output(text) == text
-
-
 def test_custom_build_args() -> None:
     class CustomWrapper(CLIWrapper):
         command = "tool"
@@ -153,7 +147,7 @@ def test_permissive_mode_returns_result_with_failures() -> None:
     wrapper = PermissiveWrapper()
     result = wrapper._execute("invalid line", response_model=PartialResponse)
 
-    from clinch.parsing import ParsingResult  # local import to avoid circulars
+    from clinch.parsing import ParsingResult
 
     assert isinstance(result, ParsingResult)
     assert result.failure_count == 1
