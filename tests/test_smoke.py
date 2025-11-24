@@ -9,6 +9,7 @@ from clinch import (
     BaseCLIError,
     BaseCLIResponse,
     CLInchException,
+    CLIWrapper,
     CommandNotFoundError,
     Field,
     ParsingError,
@@ -31,3 +32,4 @@ def test_import_clinch_package_and_exports() -> None:
     assert regex_helpers is not None
     assert BaseCLIResponse is not None
     assert BaseCLIError is not None
+    assert CLIWrapper is not None

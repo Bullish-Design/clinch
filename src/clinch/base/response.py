@@ -39,15 +39,7 @@ class _FieldPatternsDescriptor:
 
 
 class BaseCLIResponse(BaseModel):
-    """Base model for all CLI response types in CLInch.
-
-    Subclasses represent structured views of CLI output. Parsing is
-    performed via :meth:`parse_output`, which uses the parsing engine
-    to apply regex patterns and create model instances.
-
-    Each subclass exposes ``_field_patterns`` as a mapping of
-    ``field name → regex pattern`` computed lazily from field metadata.
-    """
+    """Base model for all CLI response types in CLInch."""
 
     # Exposed as a descriptor so each subclass gets its own mapping, computed on first access.
     _field_patterns: ClassVar[Dict[str, str]] = _FieldPatternsDescriptor()
@@ -61,11 +53,7 @@ class BaseCLIResponse(BaseModel):
 
     @classmethod
     def _extract_field_patterns(cls) -> Dict[str, str]:
-        """Extract regex patterns from model fields.
-
-        Looks for a ``"pattern"`` entry in ``json_schema_extra`` for each
-        Pydantic field and returns a mapping of field name to pattern.
-        """
+        """Extract regex patterns from model fields."""
         patterns: Dict[str, str] = {}
         for name, field in cls.model_fields.items():
             json_extra = field.json_schema_extra

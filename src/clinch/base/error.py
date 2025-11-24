@@ -41,11 +41,7 @@ class _ErrorFieldPatternsDescriptor:
 
 @dataclass
 class BaseCLIError(CLInchException):
-    """Base error type for CLI failures.
-
-    This is a pydantic-powered dataclass that can be raised as an
-    exception and also carries structured metadata about the failure.
-    """
+    """Base error type for CLI failures."""
 
     exit_code: int = Field(description="The command exit code")
     stderr: str = Field(description="Standard error output")
@@ -69,7 +65,7 @@ class BaseCLIError(CLInchException):
 
     @classmethod
     def _extract_field_patterns(cls) -> Dict[str, str]:
-        """Extract regex patterns from pydantic dataclass field metadata and subclass Field declarations."""
+        """Extract regex patterns from dataclass metadata and subclass Field declarations."""
         patterns: Dict[str, str] = {}
 
         # Patterns from pydantic dataclass fields (BaseCLIError itself)
@@ -102,9 +98,6 @@ class BaseCLIError(CLInchException):
         """Parse stderr into a structured error instance.
 
         Pattern-backed fields are populated from the stderr text.
-        If no patterns match, the method falls back to returning an
-        instance with only the core fields set, and any matched values
-        are attached as attributes afterwards.
         """
         base_kwargs: Dict[str, Any] = {
             "exit_code": exit_code,
@@ -113,15 +106,15 @@ class BaseCLIError(CLInchException):
             "command": command,
         }
 
+        # Instantiate base error first
+        error = cls(**base_kwargs)
+
         # Skip core fields when applying regex patterns
         patterns = {
             name: pattern
             for name, pattern in cls._field_patterns.items()
             if name not in base_kwargs
         }
-
-        # Instantiate base error first
-        error = cls(**base_kwargs)
 
         if not patterns:
             return error
@@ -134,7 +127,7 @@ class BaseCLIError(CLInchException):
             value = match.group(1) if match.groups() else match.group(0)
             matched_values[field_name] = value
 
-        # Attach matched values as attributes (works even for subclass-only fields)
+        # Attach matched values as attributes (works for subclass-only fields like error_code)
         for name, value in matched_values.items():
             setattr(error, name, value)
 
