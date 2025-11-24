@@ -25,16 +25,8 @@ def parse_output(
     """Parse CLI output into instances of the given response model.
 
     The model is expected to define a ``_field_patterns`` mapping of
-    field name → regex pattern, as populated by :class:`BaseCLIResponse`.
-
-    Args:
-        model: A Pydantic model, typically a subclass of ``BaseCLIResponse``.
-        output: Raw CLI output as either a single string or an iterable
-            of individual lines.
-
-    Returns:
-        A :class:`ParsingResult` containing both successful instances and
-        detailed failures for lines that could not be parsed.
+    field name → regex pattern, as populated by :class:`BaseCLIResponse`
+    or :class:`BaseCLIError`.
     """
     lines = _normalize_output(output)
     result: ParsingResult[TModel] = ParsingResult()

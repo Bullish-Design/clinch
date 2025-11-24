@@ -6,6 +6,7 @@ import clinch.base  # noqa: F401
 import clinch.parsing  # noqa: F401
 import clinch.utils  # noqa: F401
 from clinch import (
+    BaseCLIError,
     BaseCLIResponse,
     CLInchException,
     CommandNotFoundError,
@@ -29,3 +30,4 @@ def test_import_clinch_package_and_exports() -> None:
     assert TimeoutError is not None
     assert regex_helpers is not None
     assert BaseCLIResponse is not None
+    assert BaseCLIError is not None

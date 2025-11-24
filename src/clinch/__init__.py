@@ -3,7 +3,7 @@ from __future__ import annotations
 
 """CLInch public API."""
 
-from .base import BaseCLIResponse
+from .base import BaseCLIError, BaseCLIResponse
 from .exceptions import CLInchException, CommandNotFoundError, ParsingError, TimeoutError
 from .fields import Field
 from .parsing import ParsingFailure, ParsingResult
@@ -19,4 +19,5 @@ __all__ = [
     "TimeoutError",
     "regex_helpers",
     "BaseCLIResponse",
+    "BaseCLIError",
 ]

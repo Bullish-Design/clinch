@@ -12,37 +12,27 @@ TResponse = TypeVar("TResponse", bound="BaseCLIResponse")
 
 
 class _FieldPatternsDescriptor:
-    """Descriptor that lazily computes field pattern mappings per subclass.
-
-    This avoids relying on ``__init_subclass__`` timing, which can
-    conflict with Pydantic's model construction. Instead, patterns are
-    computed the first time ``_field_patterns`` is accessed on a given
-    subclass and then cached on that subclass.
-    """
+    """Descriptor that lazily computes field → pattern mappings per subclass."""
 
     _cache_attr = "__clinch_field_patterns__"
 
     def __get__(self, instance: object, owner: type["BaseCLIResponse"] | None) -> Dict[str, str]:
         if owner is None:
-            # Access via the descriptor object itself (shouldn't happen in normal use).
             return {}
 
-        # If we've already computed patterns for this owner, return the cached value.
         cached = owner.__dict__.get(self._cache_attr)
         if isinstance(cached, dict):
             return cached
 
-        # Merge cached patterns from base classes first.
+        # Start with patterns from base classes
         merged: Dict[str, str] = {}
         for base in owner.__mro__[1:]:
             base_cached = getattr(base, self._cache_attr, None)
             if isinstance(base_cached, dict):
                 merged.update(base_cached)
 
-        # Then overlay patterns defined directly on this owner.
-        if hasattr(owner, "_extract_field_patterns"):
-            own_patterns = owner._extract_field_patterns()
-            merged.update(own_patterns)
+        # Add/override with patterns from this class
+        merged.update(owner._extract_field_patterns())
 
         setattr(owner, self._cache_attr, merged)
         return merged
