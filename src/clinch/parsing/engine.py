@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from typing import Any, Dict, Iterable, List, Type, TypeVar, cast
 
 from pydantic import BaseModel, ValidationError
@@ -9,6 +10,28 @@ from pydantic import BaseModel, ValidationError
 from clinch.parsing import ParsingFailure, ParsingResult
 
 TModel = TypeVar("TModel", bound=BaseModel)
+
+
+@lru_cache(maxsize=256)
+def _compile_pattern(pattern: str) -> re.Pattern[str]:
+    """Compile and cache regex patterns used by the parsing engine."""
+    return re.compile(pattern)
+
+
+def clear_pattern_cache() -> None:
+    """Clear the compiled regex pattern cache."""
+    _compile_pattern.cache_clear()
+
+
+def get_cache_info() -> Dict[str, int]:
+    """Return basic statistics about the compiled pattern cache."""
+    info = _compile_pattern.cache_info()
+    return {
+        "hits": info.hits,
+        "misses": info.misses,
+        "size": info.currsize,
+        "maxsize": info.maxsize,
+    }
 
 
 def _normalize_output(output: str | Iterable[str]) -> List[str]:
@@ -37,7 +60,8 @@ def parse_output(
 
         for field_name, pattern in patterns.items():
             attempted_patterns.append(pattern)
-            match = re.search(pattern, raw_line)
+            compiled_pattern = _compile_pattern(pattern)
+            match = compiled_pattern.search(raw_line)
             if not match:
                 continue
 
@@ -62,11 +86,18 @@ def parse_output(
         try:
             instance = model(**matched_values)
         except ValidationError as exc:
+            # Step 2: preserve full validation error details
+            try:
+                exception_detail = exc.json()
+            except Exception:
+                # If JSON serialization fails for any reason, fall back to str()
+                exception_detail = str(exc)
+
             result.failures.append(
                 ParsingFailure(
                     raw_text=raw_line,
                     attempted_patterns=list(attempted_patterns),
-                    exception=str(exc),
+                    exception=exception_detail,
                     line_number=index,
                 )
             )
