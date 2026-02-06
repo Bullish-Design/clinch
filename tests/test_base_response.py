@@ -1,7 +1,7 @@
 # tests/test_base_response.py
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 from clinch import BaseCLIResponse, Field
 from clinch.parsing import ParsingResult
@@ -9,9 +9,6 @@ from clinch.parsing import ParsingResult
 
 class _TestResponse(BaseCLIResponse):
     value: str = Field(pattern=r"value: (\w+)")
-
-    # def __init__(self, value: str) -> None:  # pragma: no cover
-    #     super().__init__(value=value)
 
 
 class MixedResponse(BaseCLIResponse):
@@ -64,7 +61,7 @@ def test_parse_output_accepts_iterable_output() -> None:
 
 def test_extract_field_patterns_picks_up_only_pattern_fields() -> None:
     patterns = MixedResponse._extract_field_patterns()
-    assert patterns == {"with_pattern": r"pattern: (\w+)"}  # no entry for fields without pattern
+    assert patterns == {"with_pattern": r"pattern: (\w+)"}
 
 
 def test_field_patterns_populated_on_subclass_creation() -> None:
@@ -75,3 +72,9 @@ def test_field_patterns_are_inherited_and_merged() -> None:
     assert ParentResponse._field_patterns["parent_field"] == r"parent: (\w+)"
     assert ChildResponse._field_patterns["parent_field"] == r"parent: (\w+)"
     assert ChildResponse._field_patterns["child_field"] == r"child: (\w+)"
+
+
+def test_parse_blocks_method_exists() -> None:
+    """BaseCLIResponse exposes parse_blocks as a class method."""
+    assert hasattr(BaseCLIResponse, "parse_blocks")
+    assert callable(_TestResponse.parse_blocks)

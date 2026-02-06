@@ -12,7 +12,7 @@ class _TestModel(BaseModel):
 
 
 def test_empty_parsing_result_has_zero_counts_and_no_failures() -> None:
-    result: ParsingResult[ _TestModel] = ParsingResult()
+    result: ParsingResult[_TestModel] = ParsingResult()
     assert result.success_count == 0
     assert result.failure_count == 0
     assert result.has_failures is False
@@ -26,7 +26,7 @@ def test_parsing_result_tracks_successes_and_failures() -> None:
         exception="error",
         line_number=10,
     )
-    result: ParsingResult[ _TestModel] = ParsingResult(
+    result: ParsingResult[_TestModel] = ParsingResult(
         successes=[success],
         failures=[failure],
     )
@@ -60,7 +60,7 @@ def test_raise_if_failures_with_failures() -> None:
 
 
 def test_raise_if_failures_no_failures() -> None:
-    result = ParsingResult(successes= [_TestModel(value="ok")])
+    result = ParsingResult(successes=[_TestModel(value="ok")])
     result.raise_if_failures()
 
 
@@ -93,9 +93,22 @@ def test_map_successes() -> None:
     assert mapped.failures == result.failures
 
 
+def test_map_successes_to_different_type() -> None:
+    """map_successes can transform to a different type."""
+    result = ParsingResult(
+        successes=[
+            _TestModel(value="one"),
+            _TestModel(value="two"),
+        ],
+    )
+
+    mapped: ParsingResult[str] = result.map_successes(lambda m: m.value.upper())
+    assert mapped.successes == ["ONE", "TWO"]
+
+
 def test_get_failure_lines_and_summary() -> None:
     result = ParsingResult(
-        successes= [_TestModel(value="ok")],
+        successes=[_TestModel(value="ok")],
         failures=[
             ParsingFailure(
                 raw_text="bad line",
@@ -113,3 +126,48 @@ def test_get_failure_lines_and_summary() -> None:
     assert "1 / 2 lines" in summary
     assert "Line 3" in summary
     assert "bad line" in summary
+
+
+# --- __iter__, __len__, __getitem__ tests (#13) ---
+
+
+def test_iter_over_successes() -> None:
+    result = ParsingResult(
+        successes=[_TestModel(value="a"), _TestModel(value="b")],
+    )
+    values = [m.value for m in result]
+    assert values == ["a", "b"]
+
+
+def test_len_returns_success_count() -> None:
+    result = ParsingResult(
+        successes=[_TestModel(value="a"), _TestModel(value="b"), _TestModel(value="c")],
+    )
+    assert len(result) == 3
+
+
+def test_getitem_by_index() -> None:
+    result = ParsingResult(
+        successes=[_TestModel(value="first"), _TestModel(value="second")],
+    )
+    assert result[0].value == "first"
+    assert result[1].value == "second"
+    assert result[-1].value == "second"
+
+
+def test_getitem_by_slice() -> None:
+    result = ParsingResult(
+        successes=[
+            _TestModel(value="a"),
+            _TestModel(value="b"),
+            _TestModel(value="c"),
+        ],
+    )
+    sliced = result[1:]
+    assert [m.value for m in sliced] == ["b", "c"]
+
+
+def test_empty_result_len_is_zero() -> None:
+    result: ParsingResult[_TestModel] = ParsingResult()
+    assert len(result) == 0
+    assert list(result) == []

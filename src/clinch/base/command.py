@@ -17,6 +17,19 @@ class BaseCLICommand(BaseModel):
     * subcommand: the CLI subcommand or initial argument
     * response_model: the BaseCLIResponse subclass used for parsing
     and then declare additional fields for command parameters.
+
+    The default :meth:`build_args` implementation automatically converts
+    instance fields into CLI flags using the same conventions as
+    :meth:`CLIWrapper._build_args`:
+
+    * ``None`` values are skipped.
+    * ``bool`` True -> ``--flag``, False -> omitted.
+    * ``list`` values are expanded: ``exclude=['a', 'b']`` becomes
+      ``--exclude a --exclude b``.
+    * Other values become ``--key value``.
+    * Underscores in field names are converted to hyphens.
+
+    Override :meth:`build_args` for custom argument formatting.
     """
 
     subcommand: ClassVar[str]
@@ -31,9 +44,28 @@ class BaseCLICommand(BaseModel):
     def build_args(self) -> list[str]:
         """Build CLI arguments from command parameters.
 
-        Override this to customize argument building.
+        The default implementation converts all instance fields to CLI
+        flags automatically.  Override this to customize argument building.
         """
-        return [self.subcommand]
+        args: list[str] = [self.subcommand]
+
+        for field_name in type(self).model_fields:
+            value: Any = getattr(self, field_name)
+
+            if value is None:
+                continue
+
+            flag = f"--{field_name.replace('_', '-')}"
+            if isinstance(value, bool):
+                if value:
+                    args.append(flag)
+            elif isinstance(value, list):
+                for item in value:
+                    args.extend([flag, str(item)])
+            else:
+                args.extend([flag, str(value)])
+
+        return args
 
     def get_response_model(self) -> type[BaseCLIResponse]:
         """Get the response model class used by this command."""

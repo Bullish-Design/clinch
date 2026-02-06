@@ -13,10 +13,12 @@ def test_public_api_exports() -> None:
         "CLInchException",
         "ParsingError",
         "CommandNotFoundError",
+        "CommandTimeoutError",
         "TimeoutError",
         "regex_helpers",
         "BaseCLIResponse",
         "BaseCLIError",
         "CLIWrapper",
+        "BaseCLICommand",
     ]:
-        assert name in public
+        assert name in public, f"{name} not in __all__"

@@ -1,26 +1,24 @@
 # src/clinch/base/wrapper.py
 from __future__ import annotations
 
-import importlib
 from typing import Any, ClassVar, TypeVar
 
+import sh
 from pydantic import BaseModel, field_validator
 
 from clinch.base.command import BaseCLICommand
 from clinch.base.error import BaseCLIError
 from clinch.base.response import BaseCLIResponse
-from clinch.exceptions import CommandNotFoundError, ParsingError, TimeoutError
+from clinch.exceptions import CommandNotFoundError, CommandTimeoutError, ParsingError
 from clinch.parsing import ParsingResult
 
 TResponse = TypeVar("TResponse", bound=BaseCLIResponse)
 
-_sh = importlib.import_module("sh")
 
-
-def _to_text(value: Any) -> str:
+def _to_text(value: Any, encoding: str = "utf-8") -> str:
     """Return value as a text string, decoding bytes if necessary."""
     if isinstance(value, (bytes, bytearray)):
-        return value.decode()
+        return value.decode(encoding)
     return str(value)
 
 
@@ -28,7 +26,7 @@ class CLIWrapper(BaseModel):
     """Base class for wrapping CLI tools.
 
     Subclasses typically set command and may override strict_mode,
-    timeout, or provide a custom error_model. Command execution is
+    timeout, or provide a custom error_model.  Command execution is
     implemented via sh.
     """
 
@@ -38,9 +36,10 @@ class CLIWrapper(BaseModel):
     # Error model used when exit code is non-zero
     error_model: ClassVar[type[BaseCLIError]] = BaseCLIError
 
-    # Runtime configuration (instance-level as of refactor Step 3)
+    # Runtime configuration
     strict_mode: bool = False
     timeout: int = 30
+    encoding: str = "utf-8"
 
     model_config = {
         "arbitrary_types_allowed": True,
@@ -127,61 +126,59 @@ class CLIWrapper(BaseModel):
         self,
         *args: Any,
         response_model: type[TResponse],
+        stdin: str | bytes | None = None,
         **kwargs: Any,
     ) -> ParsingResult[TResponse]:
-        """Execute the CLI command and parse its output."""
+        """Execute the CLI command and parse its output.
+
+        Parameters
+        ----------
+        *args:
+            Positional arguments passed to the CLI command.
+        response_model:
+            The BaseCLIResponse subclass used to parse stdout.
+        stdin:
+            Optional data to send to the command's standard input.
+        **kwargs:
+            Keyword arguments converted to CLI flags via ``_build_args``.
+        """
         positional_args = self._build_positional_args(*args)
         keyword_args = self._build_args(**kwargs)
         cli_args: list[str] = [*positional_args, *keyword_args]
         command_str = self._build_command_string(cli_args)
 
+        sh_kwargs: dict[str, Any] = {
+            "_timeout": self.timeout,
+            "_err_to_out": False,
+        }
+        if stdin is not None:
+            sh_kwargs["_in"] = stdin
+
         try:
-            cmd = _sh.Command(self.command)
-            result = cmd(
-                *cli_args,
-                _timeout=self.timeout,
-                _err_to_out=False,
+            cmd = sh.Command(self.command)
+            result = cmd(*cli_args, **sh_kwargs)
+        except sh.CommandNotFound as exc:
+            raise CommandNotFoundError(str(exc)) from exc
+        except sh.TimeoutException as exc:
+            raise CommandTimeoutError(
+                f"Command '{command_str}' timed out after {self.timeout} seconds"
+            ) from exc
+        except sh.ErrorReturnCode as exc:
+            exit_code = exc.exit_code
+            stdout_text = _to_text(exc.stdout, self.encoding)
+            stderr_text = _to_text(exc.stderr, self.encoding)
+
+            error_cls = self._get_error_model()
+            error = error_cls(
+                command=command_str,
+                exit_code=exit_code,
+                stderr=stderr_text,
+                stdout=stdout_text,
             )
-        except Exception as exc:  # pragma: no cover - type-based dispatch
-            exc_type = type(exc).__name__
-
-            if exc_type == "CommandNotFound":
-                raise CommandNotFoundError(str(exc)) from exc
-
-            if exc_type == "TimeoutException":
-                raise TimeoutError(
-                    f"Command '{command_str}' timed out after {self.timeout} seconds"
-                ) from exc
-
-            if exc_type == "ErrorReturnCode" or exc_type.startswith("ErrorReturnCode_"):
-                exit_code = getattr(exc, "exit_code", 1)
-                stdout_text = _to_text(getattr(exc, "stdout", ""))
-                stderr_text = _to_text(getattr(exc, "stderr", ""))
-
-                error_cls = self._get_error_model()
-                try:
-                    error = error_cls(
-                        command=command_str,
-                        exit_code=exit_code,
-                        stderr=stderr_text,
-                        stdout=stdout_text,
-                    )
-                except TypeError:
-                    # Fallback for custom error models with a different signature
-                    error = error_cls(  # type: ignore[call-arg]
-                        command=command_str,
-                        exit_code=exit_code,
-                        stderr=stderr_text,
-                        stdout=stdout_text,
-                    )
-
-                raise error from exc
-
-            # Re-raise unexpected exceptions
-            raise
+            raise error from exc
 
         stdout_value = getattr(result, "stdout", result)
-        stdout_text = _to_text(stdout_value)
+        stdout_text = _to_text(stdout_value, self.encoding)
         preprocessed = self._preprocess_output(stdout_text)
         parse_result: ParsingResult[TResponse] = response_model.parse_output(preprocessed)
 
@@ -191,7 +188,78 @@ class CLIWrapper(BaseModel):
         return parse_result
 
     # ------------------------------------------------------------------
-    # Step 6: Command-object execution
+    # Async execution
+    # ------------------------------------------------------------------
+
+    async def _execute_async(
+        self,
+        *args: Any,
+        response_model: type[TResponse],
+        stdin: str | bytes | None = None,
+        **kwargs: Any,
+    ) -> ParsingResult[TResponse]:
+        """Execute the CLI command asynchronously and parse its output.
+
+        Uses ``asyncio.create_subprocess_exec`` for non-blocking execution.
+        The interface mirrors :meth:`_execute`.
+        """
+        import asyncio
+
+        positional_args = self._build_positional_args(*args)
+        keyword_args = self._build_args(**kwargs)
+        cli_args: list[str] = [*positional_args, *keyword_args]
+        command_str = self._build_command_string(cli_args)
+
+        stdin_bytes: bytes | None = None
+        if isinstance(stdin, str):
+            stdin_bytes = stdin.encode(self.encoding)
+        elif isinstance(stdin, bytes):
+            stdin_bytes = stdin
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                self.command,
+                *cli_args,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                stdin=asyncio.subprocess.PIPE if stdin_bytes is not None else None,
+            )
+            stdout_raw, stderr_raw = await asyncio.wait_for(
+                proc.communicate(input=stdin_bytes),
+                timeout=self.timeout,
+            )
+        except FileNotFoundError as exc:
+            raise CommandNotFoundError(str(exc)) from exc
+        except TimeoutError as exc:
+            proc.kill()
+            await proc.wait()
+            raise CommandTimeoutError(
+                f"Command '{command_str}' timed out after {self.timeout} seconds"
+            ) from exc
+
+        stdout_text = stdout_raw.decode(self.encoding) if stdout_raw else ""
+        stderr_text = stderr_raw.decode(self.encoding) if stderr_raw else ""
+
+        if proc.returncode and proc.returncode != 0:
+            error_cls = self._get_error_model()
+            error = error_cls(
+                command=command_str,
+                exit_code=proc.returncode,
+                stderr=stderr_text,
+                stdout=stdout_text,
+            )
+            raise error
+
+        preprocessed = self._preprocess_output(stdout_text)
+        parse_result: ParsingResult[TResponse] = response_model.parse_output(preprocessed)
+
+        if self.strict_mode and parse_result.has_failures:
+            raise ParsingError(parse_result.failures)
+
+        return parse_result
+
+    # ------------------------------------------------------------------
+    # Command-object execution
     # ------------------------------------------------------------------
 
     def execute_command(self, command: BaseCLICommand) -> ParsingResult[Any]:
@@ -199,3 +267,9 @@ class CLIWrapper(BaseModel):
         args = command.build_args()
         response_model = command.get_response_model()
         return self._execute(*args, response_model=response_model)
+
+    async def execute_command_async(self, command: BaseCLICommand) -> ParsingResult[Any]:
+        """Execute a BaseCLICommand instance asynchronously."""
+        args = command.build_args()
+        response_model = command.get_response_model()
+        return await self._execute_async(*args, response_model=response_model)

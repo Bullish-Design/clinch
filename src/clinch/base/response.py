@@ -1,18 +1,36 @@
 # src/clinch/base/response.py
 from __future__ import annotations
 
-from typing import Any, ClassVar, Dict, Iterable, TypeVar
+from collections.abc import Iterable
+from typing import Any, ClassVar, TypeVar
 
 from pydantic import BaseModel
 
 from clinch.parsing import ParsingResult
+from clinch.parsing.engine import parse_blocks as _parse_blocks
 from clinch.parsing.engine import parse_output as _parse_output
 
 TResponse = TypeVar("TResponse", bound="BaseCLIResponse")
 
 
-class BaseCLIResponse(BaseModel):
-    """Base model for all CLI response types in CLInch.
+class _PatternMixin:
+    """Shared pattern-extraction logic for response and error models."""
+
+    _field_patterns: ClassVar[dict[str, str]] = {}
+
+    @classmethod
+    def _merge_parent_patterns(cls) -> dict[str, str]:
+        """Walk the MRO and collect inherited ``_field_patterns``."""
+        merged: dict[str, str] = {}
+        for base in cls.__mro__[1:]:
+            patterns = getattr(base, "_field_patterns", None)
+            if isinstance(patterns, dict):
+                merged.update(patterns)
+        return merged
+
+
+class BaseCLIResponse(_PatternMixin, BaseModel):
+    r"""Base model for all CLI response types in CLInch.
 
     Subclasses map raw CLI output into validated Pydantic models. Fields typically
     declare regex extraction patterns using :func:`clinch.Field`, and parsing is
@@ -91,8 +109,6 @@ class BaseCLIResponse(BaseModel):
     clean, well-typed, and convenient to work with.
     """
 
-    _field_patterns: ClassVar[Dict[str, str]] = {}
-
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:  # type: ignore[override]
         """Populate ``_field_patterns`` when a subclass is defined.
@@ -103,19 +119,14 @@ class BaseCLIResponse(BaseModel):
         """
         super().__pydantic_init_subclass__(**kwargs)
 
-        merged: Dict[str, str] = {}
-        for base in cls.__mro__[1:]:
-            patterns = getattr(base, "_field_patterns", None)
-            if isinstance(patterns, dict):
-                merged.update(patterns)
-
+        merged = cls._merge_parent_patterns()
         merged.update(cls._extract_field_patterns())
         cls._field_patterns = merged
 
     @classmethod
-    def _extract_field_patterns(cls) -> Dict[str, str]:
-        """Return a mapping of field name → regex pattern for this model.","""
-        patterns: Dict[str, str] = {}
+    def _extract_field_patterns(cls) -> dict[str, str]:
+        """Return a mapping of field name -> regex pattern for this model."""
+        patterns: dict[str, str] = {}
         for name, field in cls.model_fields.items():
             json_extra = field.json_schema_extra
             if not json_extra:
@@ -132,3 +143,16 @@ class BaseCLIResponse(BaseModel):
     ) -> ParsingResult[TResponse]:  # type: ignore[type-var]
         """Parse CLI output into response instances using the engine."""
         return _parse_output(cls, output)
+
+    @classmethod
+    def parse_blocks(
+        cls: type[TResponse],
+        output: str | Iterable[str],
+        *,
+        delimiter: str = "",
+    ) -> ParsingResult[TResponse]:  # type: ignore[type-var]
+        """Parse multi-line record blocks from CLI output.
+
+        See :func:`clinch.parsing.engine.parse_blocks` for details.
+        """
+        return _parse_blocks(cls, output, delimiter=delimiter)

@@ -34,7 +34,7 @@ def test_error_subclass_with_pattern_parses_from_stderr() -> None:
     assert isinstance(error, CustomError)
     assert error.exit_code == 2
     assert error.command == "cmd"
-    assert getattr(error, "error_code") == "404"
+    assert error.error_code == "404"
 
 
 def test_parse_from_stderr_handles_no_match_gracefully() -> None:

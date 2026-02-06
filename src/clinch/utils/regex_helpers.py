@@ -1,7 +1,19 @@
 # src/clinch/utils/regex_helpers.py
 from __future__ import annotations
 
-"""Common regular expression patterns for CLI parsing."""
+"""Common regular expression patterns for CLI parsing.
+
+Each pattern is provided in two forms:
+
+* **Matching** (e.g. ``ISO_DATETIME``) -- matches the value wherever it
+  appears in a line.  When used in a ``Field(pattern=...)``, the engine
+  will use ``match.group(0)`` (the full match).
+* **Capturing** (e.g. ``CAPTURE_ISO_DATETIME``) -- wraps the matching
+  pattern in a capture group so that the engine extracts just the
+  value via ``match.group(1)``.
+"""
+
+# --- Matching patterns (no capture group) ---
 
 ISO_DATETIME: str = (
     r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?"
@@ -20,3 +32,15 @@ UUID: str = (
 SEMVER: str = r"\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?(?:\+[a-zA-Z0-9.-]+)?"
 HEX_COLOR: str = r"#[0-9a-fA-F]{6}"
 FILE_PATH: str = r"(?:/[^/\s]+)+/?"
+
+# --- Capturing variants (wrapped in a capture group) ---
+
+CAPTURE_ISO_DATETIME: str = f"({ISO_DATETIME})"
+CAPTURE_EMAIL: str = f"({EMAIL})"
+CAPTURE_IPV4: str = f"({IPV4})"
+CAPTURE_IPV6: str = f"({IPV6})"
+CAPTURE_URL: str = f"({URL})"
+CAPTURE_UUID: str = f"({UUID})"
+CAPTURE_SEMVER: str = f"({SEMVER})"
+CAPTURE_HEX_COLOR: str = f"({HEX_COLOR})"
+CAPTURE_FILE_PATH: str = f"({FILE_PATH})"

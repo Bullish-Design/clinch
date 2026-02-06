@@ -1,13 +1,15 @@
 # src/clinch/parsing/result.py
 from __future__ import annotations
 
-from typing import Callable, Generic, TypeVar
+from collections.abc import Callable, Iterator
+from typing import Generic, TypeVar, overload
 
 from pydantic import BaseModel
 
 from clinch.fields import Field
 
 T = TypeVar("T")
+U = TypeVar("U")
 
 
 class ParsingFailure(BaseModel):
@@ -26,8 +28,16 @@ class ParsingFailure(BaseModel):
         self.attempted_patterns.append(pattern)
 
 
-class ParsingResult(BaseModel, Generic[T]):
-    """Container for parsing results with success/failure tracking."""
+class ParsingResult(BaseModel, Generic[T]):  # noqa: UP046
+    """Container for parsing results with success/failure tracking.
+
+    Supports iteration and length checks over successes for convenience::
+
+        result = SomeResponse.parse_output(output)
+        for item in result:
+            print(item)
+        print(f"Got {len(result)} results")
+    """
 
     successes: list[T] = Field(
         default_factory=list,
@@ -50,7 +60,22 @@ class ParsingResult(BaseModel, Generic[T]):
     def failure_count(self) -> int:
         return len(self.failures)
 
-    # Step 4 helpers
+    def __iter__(self) -> Iterator[T]:  # type: ignore[override]
+        """Iterate over successfully parsed instances."""
+        return iter(self.successes)
+
+    def __len__(self) -> int:
+        """Return the number of successfully parsed instances."""
+        return len(self.successes)
+
+    @overload
+    def __getitem__(self, index: int) -> T: ...
+    @overload
+    def __getitem__(self, index: slice) -> list[T]: ...
+
+    def __getitem__(self, index: int | slice) -> T | list[T]:
+        """Access successfully parsed instances by index or slice."""
+        return self.successes[index]
 
     def raise_if_failures(self) -> None:
         """Raise ParsingError if any failures occurred."""
@@ -63,7 +88,7 @@ class ParsingResult(BaseModel, Generic[T]):
         """Filter successful results by predicate."""
         return [s for s in self.successes if predicate(s)]
 
-    def map_successes(self, func: Callable[[T], T]) -> ParsingResult[T]:
+    def map_successes(self, func: Callable[[T], U]) -> ParsingResult[U]:
         """Transform successful results, preserving failures."""
         return ParsingResult(
             successes=[func(s) for s in self.successes],

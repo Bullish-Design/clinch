@@ -4,8 +4,9 @@ from __future__ import annotations
 from clinch.exceptions import (
     CLInchException,
     CommandNotFoundError,
+    CommandTimeoutError,
     ParsingError,
-    TimeoutError,
+    TimeoutError,  # noqa: A004
 )
 from clinch.parsing import ParsingFailure
 
@@ -71,8 +72,16 @@ def test_command_not_found_error_creation() -> None:
     assert "mytool not found" in str(error)
 
 
-def test_timeout_error_creation() -> None:
-    error = TimeoutError("timed out")
+def test_command_timeout_error_creation() -> None:
+    error = CommandTimeoutError("timed out")
     assert isinstance(error, CLInchException)
     assert isinstance(error, Exception)
     assert "timed out" in str(error)
+
+
+def test_timeout_error_is_alias_for_command_timeout_error() -> None:
+    """TimeoutError is a backward-compatible alias."""
+    assert TimeoutError is CommandTimeoutError
+    error = TimeoutError("timed out")
+    assert isinstance(error, CommandTimeoutError)
+    assert isinstance(error, CLInchException)

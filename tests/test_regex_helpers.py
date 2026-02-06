@@ -94,3 +94,69 @@ def test_email_field_uses_email_pattern() -> None:
     field_info = EmailModel.model_fields["email"]
     assert field_info.json_schema_extra is not None
     assert field_info.json_schema_extra["pattern"] == regex_helpers.EMAIL
+
+
+# --- Capturing variant tests (#12) ---
+
+def test_capture_iso_datetime_extracts_value() -> None:
+    pattern = regex_helpers.CAPTURE_ISO_DATETIME
+    match = re.search(pattern, "timestamp: 2024-11-22T10:30:00Z end")
+    assert match is not None
+    assert match.group(1) == "2024-11-22T10:30:00Z"
+
+
+def test_capture_email_extracts_value() -> None:
+    pattern = regex_helpers.CAPTURE_EMAIL
+    match = re.search(pattern, "contact: user@example.com please")
+    assert match is not None
+    assert match.group(1) == "user@example.com"
+
+
+def test_capture_ipv4_extracts_value() -> None:
+    pattern = regex_helpers.CAPTURE_IPV4
+    match = re.search(pattern, "ip=192.168.1.1 ok")
+    assert match is not None
+    assert match.group(1) == "192.168.1.1"
+
+
+def test_capture_uuid_extracts_value() -> None:
+    pattern = regex_helpers.CAPTURE_UUID
+    match = re.search(pattern, "id: 123e4567-e89b-12d3-a456-426614174000 done")
+    assert match is not None
+    assert match.group(1) == "123e4567-e89b-12d3-a456-426614174000"
+
+
+def test_capture_semver_extracts_value() -> None:
+    pattern = regex_helpers.CAPTURE_SEMVER
+    match = re.search(pattern, "version 1.2.3-alpha ok")
+    assert match is not None
+    assert match.group(1) == "1.2.3-alpha"
+
+
+def test_capture_hex_color_extracts_value() -> None:
+    pattern = regex_helpers.CAPTURE_HEX_COLOR
+    match = re.search(pattern, "color: #ff00aa end")
+    assert match is not None
+    assert match.group(1) == "#ff00aa"
+
+
+def test_capture_file_path_extracts_value() -> None:
+    pattern = regex_helpers.CAPTURE_FILE_PATH
+    match = re.search(pattern, "path: /usr/local/bin end")
+    assert match is not None
+    assert match.group(1) == "/usr/local/bin"
+
+
+def test_all_capture_variants_exist() -> None:
+    """Every matching pattern has a corresponding CAPTURE_ variant."""
+    base_names = [
+        "ISO_DATETIME", "EMAIL", "IPV4", "IPV6", "URL",
+        "UUID", "SEMVER", "HEX_COLOR", "FILE_PATH",
+    ]
+    for name in base_names:
+        assert hasattr(regex_helpers, name), f"Missing {name}"
+        assert hasattr(regex_helpers, f"CAPTURE_{name}"), f"Missing CAPTURE_{name}"
+        # The capture variant wraps the base in parens
+        base = getattr(regex_helpers, name)
+        capture = getattr(regex_helpers, f"CAPTURE_{name}")
+        assert capture == f"({base})"

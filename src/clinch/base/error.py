@@ -1,16 +1,17 @@
 # src/clinch/base/error.py
 from __future__ import annotations
 
-from typing import Any, ClassVar, Dict, Self
+from typing import Any, Self
 
-from pydantic import BaseModel, Field, create_model
+from pydantic import create_model
 from pydantic.fields import FieldInfo
 
+from clinch.base.response import _PatternMixin
 from clinch.exceptions import CLInchException
 from clinch.parsing.engine import parse_output as _parse_output
 
 
-class BaseCLIError(CLInchException):
+class BaseCLIError(_PatternMixin, CLInchException):
     """Structured error information for failed CLI commands.
 
     This class is an exception type and uses Pydantic models internally
@@ -21,8 +22,6 @@ class BaseCLIError(CLInchException):
     stderr: str
     stdout: str
     command: str
-
-    _field_patterns: ClassVar[Dict[str, str]] = {}
 
     def __init__(
         self,
@@ -58,23 +57,18 @@ class BaseCLIError(CLInchException):
         We scan for :class:`FieldInfo` descriptors on the subclass, record
         their regex patterns, and then *remove* those descriptors from the
         class so that instances do not expose the attributes unless parsing
-        succeeds. Parsed values are attached to instances by ``__init__``
+        succeeds.  Parsed values are attached to instances by ``__init__``
         via the ``extra`` mapping.
         """
         super().__init_subclass__(**kwargs)
 
-        merged: Dict[str, str] = {}
-        for base in cls.__mro__[1:]:
-            patterns = getattr(base, "_field_patterns", None)
-            if isinstance(patterns, dict):
-                merged.update(patterns)
-
+        merged = cls._merge_parent_patterns()
         merged.update(cls._extract_field_patterns())
         cls._field_patterns = merged
 
     @classmethod
-    def _extract_field_patterns(cls) -> Dict[str, str]:
-        patterns: Dict[str, str] = {}
+    def _extract_field_patterns(cls) -> dict[str, str]:
+        patterns: dict[str, str] = {}
         for name, value in list(cls.__dict__.items()):
             if not isinstance(value, FieldInfo):
                 continue
@@ -97,25 +91,25 @@ class BaseCLIError(CLInchException):
     ) -> Self:
         """Parse stderr into an error instance using pattern fields."""
         pattern_fields = dict(cls._field_patterns)
-        pattern_data: Dict[str, Any] = {}
+        pattern_data: dict[str, Any] = {}
 
         if pattern_fields:
-            field_definitions: Dict[str, tuple[type[str], Any]] = {
+            field_definitions: dict[str, tuple[type[str], Any]] = {
                 name: (str, ...)
                 for name in pattern_fields
             }
-            PatternModel = create_model(  # type: ignore[call-arg]
+            PatternModel = create_model(  # noqa: N806  # type: ignore[call-arg]
                 f"{cls.__name__}PatternModel",
                 **field_definitions,
             )
-            setattr(PatternModel, "_field_patterns", pattern_fields)
+            PatternModel._field_patterns = pattern_fields
 
             parse_result = _parse_output(PatternModel, stderr)
             if parse_result.successes:
                 pattern_instance = parse_result.successes[0]
                 pattern_data = pattern_instance.model_dump()
 
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "exit_code": exit_code,
             "stderr": stderr,
             "stdout": stdout,
