@@ -2,7 +2,7 @@
 
 {
   # https://devenv.sh/basics/
-  env.GREET = "devenv";
+  env.GREET = "CLInch";
 
   # https://devenv.sh/packages/
   packages = with pkgs; [ 
