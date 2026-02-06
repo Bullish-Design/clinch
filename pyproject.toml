@@ -31,7 +31,8 @@ include = [
     "src",
     "tests",
     "README.md",
-    "DEV_SPEC.md",
+    "DEV_GUIDE.md",
+    "USER_GUIDE.md",
 ]
 
 [tool.pytest.ini_options]
