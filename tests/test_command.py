@@ -31,13 +31,6 @@ class ParameterizedCommand(BaseCLICommand):
             raise ValueError("count must be positive")
         return v
 
-    def build_args(self) -> list[str]:
-        args = [self.subcommand]
-        if self.verbose:
-            args.append("--verbose")
-        args.extend(["--count", str(self.count)])
-        return args
-
 
 def test_simple_command() -> None:
     """Test basic command creation."""
@@ -46,10 +39,67 @@ def test_simple_command() -> None:
     assert cmd.get_response_model() == _TestResponse
 
 
-def test_parameterized_command() -> None:
-    """Test command with parameters."""
+def test_parameterized_command_auto_build_args() -> None:
+    """Test auto build_args converts fields to flags."""
     cmd = ParameterizedCommand(verbose=True, count=5)
-    assert cmd.build_args() == ["test", "--verbose", "--count", "5"]
+    args = cmd.build_args()
+    assert "test" in args
+    assert "--verbose" in args
+    assert "--count" in args
+    assert "5" in args
+
+
+def test_parameterized_command_auto_skips_false_bool() -> None:
+    """False booleans are omitted from auto build_args."""
+    cmd = ParameterizedCommand(verbose=False, count=10)
+    args = cmd.build_args()
+    assert "--verbose" not in args
+    assert "--count" in args
+
+
+def test_command_auto_build_args_with_none() -> None:
+    """None values are skipped in auto build_args."""
+
+    class NullableCommand(BaseCLICommand):
+        subcommand = "run"
+        response_model = _TestResponse
+        path: str | None = None
+
+    cmd = NullableCommand()
+    assert cmd.build_args() == ["run"]
+
+    cmd2 = NullableCommand(path="/tmp")
+    args = cmd2.build_args()
+    assert "--path" in args
+    assert "/tmp" in args
+
+
+def test_command_auto_build_args_with_list() -> None:
+    """List values are expanded in auto build_args."""
+
+    class ListCommand(BaseCLICommand):
+        subcommand = "search"
+        response_model = _TestResponse
+        tags: list[str] = []
+
+    cmd = ListCommand(tags=["a", "b"])
+    args = cmd.build_args()
+    assert args.count("--tags") == 2
+    assert "a" in args
+    assert "b" in args
+
+
+def test_command_auto_build_args_underscore_to_hyphen() -> None:
+    """Underscores in field names become hyphens in flags."""
+
+    class HyphenCommand(BaseCLICommand):
+        subcommand = "deploy"
+        response_model = _TestResponse
+        dry_run: bool = True
+
+    cmd = HyphenCommand()
+    args = cmd.build_args()
+    assert "--dry-run" in args
 
 
 def test_command_validation() -> None:
@@ -69,7 +119,7 @@ def test_execute_command(monkeypatch: pytest.MonkeyPatch) -> None:
         command = "echo"
 
     # Patch _execute to avoid shelling out
-    def fake_execute(self: TestWrapper, *args: str, response_model: type[TestResponse]):
+    def fake_execute(self: TestWrapper, *args: str, response_model: type, **kwargs: object):  # type: ignore[override]
         output = args[0]
         return response_model.parse_output(output)
 

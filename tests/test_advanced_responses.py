@@ -82,7 +82,7 @@ class _LogEntry(BaseCLIResponse):
         return v.upper()
 
     @model_validator(mode="after")
-    def _strip_message(self) -> "_LogEntry":
+    def _strip_message(self) -> _LogEntry:
         self.message = self.message.strip()
         return self
 
@@ -122,7 +122,7 @@ class _DockerContainer(BaseCLIResponse):
     ports: str | None = Field(default=None, pattern=r"(\d+->\d+/tcp)")
 
     @model_validator(mode="after")
-    def _normalize_and_fix_state(self) -> "_DockerContainer":
+    def _normalize_and_fix_state(self) -> _DockerContainer:
         self.status = self.status.upper()
         if self.status == "EXITED":
             self.ports = None

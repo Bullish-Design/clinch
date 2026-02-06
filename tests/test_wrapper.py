@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from clinch import BaseCLIError, CommandNotFoundError, ParsingError, TimeoutError
+from clinch import BaseCLIError, CommandNotFoundError, CommandTimeoutError, ParsingError
 from clinch.base import BaseCLIResponse, CLIWrapper
 from clinch.fields import Field
 
@@ -40,6 +40,7 @@ def test_default_wrapper_configuration() -> None:
     assert wrapper.command == "echo"
     assert wrapper.strict_mode is False
     assert wrapper.timeout == 30
+    assert wrapper.encoding == "utf-8"
     assert wrapper._get_error_model() is BaseCLIError
 
 
@@ -160,7 +161,7 @@ def test_permissive_mode_returns_result_with_failures() -> None:
     assert result.success_count == 0
 
 
-def test_timeout_raises_timeout_error() -> None:
+def test_timeout_raises_command_timeout_error() -> None:
     class EmptyResponse(BaseCLIResponse):
         pass
 
@@ -170,7 +171,7 @@ def test_timeout_raises_timeout_error() -> None:
 
     wrapper = SleepWrapper()
 
-    with pytest.raises(TimeoutError):
+    with pytest.raises(CommandTimeoutError):
         wrapper._execute("2", response_model=EmptyResponse)
 
 
@@ -190,6 +191,7 @@ def test_preprocess_output_is_used_for_parsing() -> None:
     assert result.success_count == 1
     assert result.failure_count == 0
     assert result.successes[0].value == "TEST"
+
 
 def test_timeout_validation() -> None:
     """CLIWrapper.timeout must be positive and not too large."""
@@ -226,3 +228,23 @@ def test_command_defined_works() -> None:
 
     wrapper = ValidWrapper()
     assert wrapper.command == "echo"
+
+
+def test_encoding_parameter() -> None:
+    """CLIWrapper supports configurable encoding."""
+    wrapper = EchoWrapper(encoding="latin-1")
+    assert wrapper.encoding == "latin-1"
+
+
+def test_stdin_support() -> None:
+    """_execute passes stdin to the command."""
+    class CatResponse(BaseCLIResponse):
+        line: str = Field(pattern=r"(.+)")
+
+    class CatWrapper(CLIWrapper):
+        command = "cat"
+
+    wrapper = CatWrapper()
+    result = wrapper._execute(response_model=CatResponse, stdin="hello stdin")
+    assert result.success_count == 1
+    assert result.successes[0].line == "hello stdin"
