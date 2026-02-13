@@ -2,6 +2,8 @@
 
 **Pydantic-based library for wrapping CLI tools with type-safe Python interfaces.**
 
+record scratch - were going in a codegen direction. Self validating, if all goes well. 
+
 CLInch turns raw CLI output into validated Pydantic models. Define regex patterns on your fields, point at a command, and get typed Python objects back — with partial failure tracking, async support, and structured error handling.
 
 ## Install
