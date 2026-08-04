@@ -8,7 +8,7 @@ name = "clinch"
 version = "0.1.0"
 description = "Pydantic-based library for wrapping CLI tools with type-safe Python interfaces."
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 dependencies = [
     "pydantic>=2.10",
     "sh>=2.0",
@@ -36,6 +36,7 @@ include = [
     "docs",
     "examples",
     "README.md",
+    "CHANGELOG.md",
     "DEV_SPEC.md",
 ]
 

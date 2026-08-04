@@ -530,7 +530,7 @@ class ServerInfo(BaseCLIResponse):
 
 ## Requirements
 
-- Python ≥3.13
+- Python ≥3.12
 - pydantic ≥2.10
 - sh ≥2.0
 
