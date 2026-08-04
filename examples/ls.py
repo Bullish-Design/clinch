@@ -1,4 +1,4 @@
-# src/clinch/examples/ls.py
+# examples/ls.py
 from __future__ import annotations
 
 from clinch import Field

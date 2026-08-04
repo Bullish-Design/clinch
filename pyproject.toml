@@ -41,6 +41,7 @@ include = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["examples"]
 addopts = [
     "--cov=src/clinch",
     "--cov-report=term-missing",

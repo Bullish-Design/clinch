@@ -1,7 +1,8 @@
 # tests/integration/test_examples_usage.py
 from __future__ import annotations
 
-from clinch.examples import EchoWrapper, LsWrapper
+from echo import EchoWrapper
+from ls import LsWrapper
 
 
 def test_echo_wrapper_example_round_trip() -> None:

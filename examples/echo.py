@@ -1,4 +1,4 @@
-# src/clinch/examples/echo.py
+# examples/echo.py
 from __future__ import annotations
 
 from clinch import Field
