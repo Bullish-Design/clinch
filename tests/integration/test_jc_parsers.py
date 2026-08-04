@@ -2,11 +2,13 @@
 """Integration tests for the optional jc parser adapter.
 
 These tests exercise the real ``jc`` library and are skipped when it is
-not installed (``pip install clinch[jc]``).
+not installed (``pip install clinch[jc]``).  Real-tool tests are also
+skipped when the underlying tool is unavailable.
 """
 
 from __future__ import annotations
 
+import shutil
 import tempfile
 from pathlib import Path
 
@@ -30,6 +32,39 @@ class CsvWrapper(CLIWrapper):
 
     def read(self, path: Path):
         return self._execute(str(path), response_model=CsvRow)
+
+
+class PsProcess(BaseCLIResponse):
+    _cli_parser = JCParser("ps")
+
+    pid: int
+    command: str
+    rss: int
+
+
+class PsWrapper(CLIWrapper):
+    command = "ps"
+
+    def processes(self):
+        return self._execute("-eo", "pid,comm,rss", response_model=PsProcess)
+
+
+class DfUsage(BaseCLIResponse):
+    _cli_parser = JCParser("df")
+
+    filesystem: str
+    size: int
+    used: int
+    available: int
+    use_percent: int
+    mounted_on: str
+
+
+class DfWrapper(CLIWrapper):
+    command = "df"
+
+    def usage(self):
+        return self._execute("-h", response_model=DfUsage)
 
 
 def _csv_file() -> Path:
@@ -65,3 +100,23 @@ def test_jc_parser_validation_error_becomes_failure() -> None:
     result = parse_output(CsvRow, raw, parser=JCParser("csv"))
     assert result.success_count == 0
     assert result.failure_count == 1
+
+
+@pytest.mark.skipif(shutil.which("ps") is None, reason="ps not available")
+def test_ps_parser_through_wrapper() -> None:
+    result = PsWrapper().processes()
+
+    assert result.success_count >= 1  # at least our own process
+    assert result.failure_count == 0
+    assert all(isinstance(p.pid, int) and isinstance(p.rss, int) for p in result.successes)
+    assert any(p.pid == 1 for p in result.successes)  # init is always present
+
+
+@pytest.mark.skipif(shutil.which("df") is None, reason="df not available")
+def test_df_parser_through_wrapper() -> None:
+    result = DfWrapper().usage()
+
+    assert result.success_count >= 1
+    assert result.failure_count == 0
+    assert any(fs.mounted_on == "/" for fs in result.successes)  # root fs always present
+    assert all(fs.use_percent >= 0 for fs in result.successes)

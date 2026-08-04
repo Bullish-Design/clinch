@@ -40,6 +40,67 @@ class CsvWrapper(CLIWrapper):
         return self._execute(str(path), response_model=CsvRow)
 
 
+class PsProcess(BaseCLIResponse):
+    """One process row from ``ps -eo pid,comm,rss``, parsed by jc's ``ps`` parser."""
+
+    _cli_parser = JCParser("ps")
+
+    pid: int
+    command: str
+    rss: int  # resident set size, KB
+
+
+class PsWrapper(CLIWrapper):
+    """Wrapper around ``ps`` using jc's battle-tested parser."""
+
+    command = "ps"
+
+    def processes(self) -> ParsingResult[PsProcess]:
+        return self._execute("-eo", "pid,comm,rss", response_model=PsProcess)
+
+
+class DfUsage(BaseCLIResponse):
+    """One filesystem row from ``df -h``, parsed by jc's ``df`` parser.
+
+    jc normalizes the human-readable columns back to bytes.
+    """
+
+    _cli_parser = JCParser("df")
+
+    filesystem: str
+    size: int
+    used: int
+    available: int
+    use_percent: int
+    mounted_on: str
+
+
+class DfWrapper(CLIWrapper):
+    """Wrapper around ``df`` using jc's battle-tested parser."""
+
+    command = "df"
+
+    def usage(self) -> ParsingResult[DfUsage]:
+        return self._execute("-h", response_model=DfUsage)
+
+
+def _top_processes() -> None:
+    wrapper = PsWrapper()
+    result = wrapper.processes()
+    print(f"parsed {result.success_count} processes, {result.failure_count} failures")
+    top = sorted(result.successes, key=lambda p: p.rss, reverse=True)[:5]
+    for proc in top:
+        print(f"  pid {proc.pid:>6}  {proc.rss / 1024:>8.1f} MB  {proc.command}")
+
+
+def _filesystem_usage() -> None:
+    wrapper = DfWrapper()
+    result = wrapper.usage()
+    print(f"parsed {result.success_count} filesystems, {result.failure_count} failures")
+    for fs in result.successes:
+        print(f"  {fs.filesystem} mounted on {fs.mounted_on}: {fs.use_percent}% used")
+
+
 def main() -> None:
     with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False) as fh:
         fh.write("name,age\nfoo,42\nbar,7\n")
@@ -57,6 +118,10 @@ def main() -> None:
     print("direct:", [(row.name, row.age) for row in direct.successes])
 
     path.unlink()
+
+    # Real tools through jc's parser catalog
+    _top_processes()
+    _filesystem_usage()
 
 
 if __name__ == "__main__":
