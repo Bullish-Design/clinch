@@ -145,6 +145,7 @@ class CLIWrapper(BaseModel):
                 *cli_args,
                 _timeout=self.timeout,
                 _err_to_out=False,
+                _tty_out=False,
             )
         except Exception as exc:  # pragma: no cover - type-based dispatch
             exc_type = type(exc).__name__

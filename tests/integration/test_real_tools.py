@@ -1,6 +1,11 @@
 # tests/integration/test_real_tools.py
 from __future__ import annotations
 
+import shutil
+
+import pytest
+from pydantic import field_validator
+
 from clinch import BaseCLIError, Field
 from clinch.base import BaseCLIResponse, CLIWrapper
 
@@ -47,3 +52,34 @@ def test_ls_integration_nonexistent_path_raises_error_model() -> None:
         assert exc.exit_code != 0
     else:
         raise AssertionError("Expected BaseCLIError to be raised for nonexistent path")
+
+
+class GitBranchResponse(BaseCLIResponse):
+    name: str = Field(pattern=r"\*?\s+(\S+)")
+    is_current: bool = Field(default=False, pattern=r"(\*)")
+
+    @field_validator("is_current", mode="before")
+    @classmethod
+    def _coerce_is_current(cls, v: object) -> bool:
+        return bool(v)
+
+
+class GitWrapper(CLIWrapper):
+    command = "git"
+
+    def branches(self):
+        return self._execute("branch", response_model=GitBranchResponse)
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git not available")
+def test_git_branch_integration_captures_output_despite_tty_pager() -> None:
+    """Regression: ``git branch`` auto-pages on a TTY, which broke capture.
+
+    sh's default ``tty_out=True`` makes git detect a terminal and spawn
+    ``less``; CLInch must capture through a pipe so parsing succeeds.
+    """
+    result = GitWrapper().branches()
+
+    assert result.success_count >= 1
+    assert result.failure_count == 0
+    assert any(b.name == "main" for b in result.successes)

@@ -32,8 +32,10 @@ packages = ["src/clinch"]
 include = [
     "src",
     "tests",
+    "docs",
+    "examples",
     "README.md",
-    "CLInch_SPEC.md",
+    "DEV_SPEC.md",
 ]
 
 [tool.pytest.ini_options]

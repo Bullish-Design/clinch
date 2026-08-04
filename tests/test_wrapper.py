@@ -139,6 +139,31 @@ def test_execute_populates_error_pattern_fields_from_stderr() -> None:
     assert exc_info.value.error_code == "404"
 
 
+def test_execute_captures_stdout_that_would_page_on_a_tty() -> None:
+    """Regression: sh's default ``tty_out=True`` gives children a PTY for stdout.
+
+    Commands like ``git branch`` detect the TTY and auto-spawn a pager
+    (``less``), which breaks output capture (SIGPIPE / empty stdout).
+    CLInch must capture raw output through a pipe instead.
+    """
+
+    class ValueResponse(BaseCLIResponse):
+        value: str = Field(pattern=r"value: (\w+)")
+
+    # Emulate a pager-spawning command: emit output only when stdout is a
+    # pipe, silently "page" (write nothing) when stdout is a TTY.
+    script = "if [ -t 1 ]; then exit 0; else echo 'value: captured'; fi"
+
+    class ShWrapper(CLIWrapper):
+        command = "sh"
+
+    wrapper = ShWrapper()
+    result = wrapper._execute("-c", script, response_model=ValueResponse)
+
+    assert result.success_count == 1
+    assert result.successes[0].value == "captured"
+
+
 def test_strict_mode_raises_on_parsing_failure() -> None:
     class PartialResponse(BaseCLIResponse):
         value: str = Field(pattern=r"value: (\w+)")
