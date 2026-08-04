@@ -9,7 +9,11 @@ from pydantic import BaseModel, field_validator
 from clinch.base.command import BaseCLICommand
 from clinch.base.error import BaseCLIError
 from clinch.base.response import BaseCLIResponse
-from clinch.exceptions import CommandNotFoundError, ParsingError, TimeoutError
+from clinch.exceptions import (
+    CommandNotFoundError,
+    ParsingError,
+    TimeoutError,  # noqa: A004 - deliberate public API shadowing the builtin
+)
 from clinch.parsing import ParsingResult
 
 TResponse = TypeVar("TResponse", bound=BaseCLIResponse)
@@ -59,7 +63,7 @@ class CLIWrapper(BaseModel):
             raise ValueError("timeout must not exceed 600 seconds")
         return value
 
-    def model_post_init(self, __context: Any) -> None:  # type: ignore[override]
+    def model_post_init(self, __context: Any) -> None:
         """Validate wrapper configuration after initialization."""
         if not getattr(type(self), "command", None):
             msg = f"{type(self).__name__} must define 'command' class variable"
@@ -159,21 +163,12 @@ class CLIWrapper(BaseModel):
                 stderr_text = _to_text(getattr(exc, "stderr", ""))
 
                 error_cls = self._get_error_model()
-                try:
-                    error = error_cls(
-                        command=command_str,
-                        exit_code=exit_code,
-                        stderr=stderr_text,
-                        stdout=stdout_text,
-                    )
-                except TypeError:
-                    # Fallback for custom error models with a different signature
-                    error = error_cls(  # type: ignore[call-arg]
-                        command=command_str,
-                        exit_code=exit_code,
-                        stderr=stderr_text,
-                        stdout=stdout_text,
-                    )
+                error = error_cls.parse_from_stderr(
+                    stderr=stderr_text,
+                    exit_code=exit_code,
+                    command=command_str,
+                    stdout=stdout_text,
+                )
 
                 raise error from exc
 

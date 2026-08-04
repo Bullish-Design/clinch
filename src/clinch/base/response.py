@@ -1,7 +1,8 @@
 # src/clinch/base/response.py
 from __future__ import annotations
 
-from typing import Any, ClassVar, Dict, Iterable, TypeVar
+from collections.abc import Iterable
+from typing import Any, ClassVar, TypeVar
 
 from pydantic import BaseModel
 
@@ -111,11 +112,11 @@ class BaseCLIResponse(BaseModel):
     clean, well-typed, and convenient to work with.
     """
 
-    _field_patterns: ClassVar[Dict[str, str]] = {}
+    _field_patterns: ClassVar[dict[str, str]] = {}
     _cli_parser: ClassVar[Parser | None] = None
 
     @classmethod
-    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:  # type: ignore[override]
+    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
         """Populate ``_field_patterns`` when a subclass is defined.
 
         We rely on Pydantic's ``__pydantic_init_subclass__`` hook so that
@@ -124,7 +125,7 @@ class BaseCLIResponse(BaseModel):
         """
         super().__pydantic_init_subclass__(**kwargs)
 
-        merged: Dict[str, str] = {}
+        merged: dict[str, str] = {}
         for base in cls.__mro__[1:]:
             patterns = getattr(base, "_field_patterns", None)
             if isinstance(patterns, dict):
@@ -134,12 +135,12 @@ class BaseCLIResponse(BaseModel):
         cls._field_patterns = merged
 
     @classmethod
-    def _extract_field_patterns(cls) -> Dict[str, str]:
+    def _extract_field_patterns(cls) -> dict[str, str]:
         """Return a mapping of field name → regex pattern for this model.","""
-        patterns: Dict[str, str] = {}
+        patterns: dict[str, str] = {}
         for name, field in cls.model_fields.items():
             json_extra = field.json_schema_extra
-            if not json_extra:
+            if not isinstance(json_extra, dict):
                 continue
             value = json_extra.get("pattern")
             if isinstance(value, str):
@@ -150,7 +151,7 @@ class BaseCLIResponse(BaseModel):
     def parse_output(
         cls: type[TResponse],
         output: str | Iterable[str],
-    ) -> ParsingResult[TResponse]:  # type: ignore[type-var]
+    ) -> ParsingResult[TResponse]:
         """Parse CLI output into response instances using the engine.
 
         The parser used is determined by ``cls._cli_parser``.  When

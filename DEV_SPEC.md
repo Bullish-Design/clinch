@@ -939,6 +939,48 @@ class DockerVersion(BaseCLISingleResponse):
 version = docker.version()  # Returns DockerVersion, not ParsingResult
 ```
 
+### Adding Custom Parsers
+
+Parsing is a pluggable strategy. The default `RegexParser` extracts fields
+per-line from a model's `_field_patterns`; for output it cannot express
+(tables with continuation lines, key-value stanzas, nested structures),
+drop in a custom `Parser` or the optional `JCParser` adapter.
+
+**Protocol:**
+
+```python
+# src/clinch/parsing/protocol.py
+
+class Parser(Protocol):
+    def parse(self, output: str) -> ParserOutput: ...
+
+@dataclass
+class ParserOutput:
+    records: list[dict[str, Any]]     # raw records → model(**record)
+    failures: list[ParsingFailure] = field(default_factory=list)
+```
+
+**Binding a parser to a response model:**
+
+```python
+class DigAnswer(BaseCLIResponse):
+    _cli_parser = JCParser("dig")   # optional adapter, needs clinch[jc]
+    name: str
+    ttl: int
+    data: str
+```
+
+When `_cli_parser` is `None` (the default) the engine builds a `RegexParser`
+from `_field_patterns` — fully backward compatible. A parser can also be
+passed explicitly: `parse_output(Model, text, parser=my_parser)`.
+
+**Parser responsibilities:**
+- Accept the full output as one string (engine normalizes iterables first)
+- Return raw dicts whose keys match model field names; the engine handles
+  Pydantic construction and validation-error tracking
+- Raise nothing on bad input — report misses via `ParserOutput.failures`;
+  unexpected exceptions are caught by the engine and recorded as failures
+
 ### Adding New Regex Patterns
 
 **Location:** `src/clinch/utils/regex_helpers.py`

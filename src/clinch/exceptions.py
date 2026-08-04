@@ -1,12 +1,12 @@
 # src/clinch/exceptions.py
-from __future__ import annotations
-
 """Exception hierarchy for CLInch."""
+
+from __future__ import annotations
 
 from clinch.parsing.result import ParsingFailure
 
 
-class CLInchException(Exception):
+class CLInchException(Exception):  # noqa: N818 - deliberate base name, not an Error
     """Base exception for all CLInch errors."""
 
 
@@ -29,5 +29,5 @@ class CommandNotFoundError(CLInchException):
     """Raised when CLI command doesn't exist in PATH."""
 
 
-class TimeoutError(CLInchException):
+class TimeoutError(CLInchException):  # noqa: A001 - deliberate public API shadowing the builtin
     """Raised when CLI command execution exceeds timeout."""

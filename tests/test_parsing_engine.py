@@ -1,14 +1,13 @@
 # tests/test_parsing_engine.py
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
-from pydantic import BaseModel, ValidationError, field_validator
+from pydantic import BaseModel, field_validator
 
 from clinch import BaseCLIResponse, Field
 from clinch.parsing import ParsingResult
 from clinch.parsing.engine import (
-    clear_pattern_cache,
     get_cache_info,
     parse_output,
 )

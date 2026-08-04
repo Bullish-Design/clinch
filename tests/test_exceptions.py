@@ -5,7 +5,7 @@ from clinch.exceptions import (
     CLInchException,
     CommandNotFoundError,
     ParsingError,
-    TimeoutError,
+    TimeoutError,  # noqa: A004 - deliberate public API shadowing the builtin
 )
 from clinch.parsing import ParsingFailure
 

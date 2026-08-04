@@ -43,7 +43,7 @@ def test_secure_wrapper_requires_ssl_for_remote_hosts() -> None:
         use_ssl: bool = True
 
         @model_validator(mode="after")
-        def validate_security(self) -> "SecureWrapper":
+        def validate_security(self) -> SecureWrapper:
             if self.host != "localhost" and not self.use_ssl:
                 raise ValueError("SSL required")
             return self

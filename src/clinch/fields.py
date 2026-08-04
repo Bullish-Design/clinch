@@ -7,7 +7,7 @@ from pydantic import Field as PydanticField
 from pydantic_core import PydanticUndefined
 
 
-def Field(
+def Field(  # noqa: N802 - mirrors pydantic's capitalized `Field` API
     default: Any = PydanticUndefined,
     *,
     pattern: str | None = None,

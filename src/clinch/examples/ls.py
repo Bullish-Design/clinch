@@ -1,8 +1,6 @@
 # src/clinch/examples/ls.py
 from __future__ import annotations
 
-from typing import Iterable, List
-
 from clinch import Field
 from clinch.base import BaseCLICommand, BaseCLIResponse, CLIWrapper
 from clinch.parsing import ParsingResult

@@ -50,7 +50,7 @@ class LogEntry(BaseCLIResponse):
         return value
 
     @model_validator(mode="after")
-    def normalize_level(self) -> "LogEntry":
+    def normalize_level(self) -> LogEntry:
         self.level = self.level.upper()
         return self
 

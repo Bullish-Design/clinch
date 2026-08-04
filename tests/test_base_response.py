@@ -1,7 +1,7 @@
 # tests/test_base_response.py
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 from clinch import BaseCLIResponse, Field
 from clinch.parsing import ParsingResult

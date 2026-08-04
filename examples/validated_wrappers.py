@@ -60,7 +60,7 @@ class GitWrapper(CLIWrapper):
         return value
 
     @model_validator(mode="after")
-    def ensure_default_is_protected(self) -> "GitWrapper":
+    def ensure_default_is_protected(self) -> GitWrapper:
         if self.default_branch not in self.protected_branches:
             msg = "default_branch must be included in protected_branches"
             raise ValueError(msg)

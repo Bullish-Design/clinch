@@ -53,7 +53,7 @@ class JCParser:
     def parse(self, output: str) -> ParserOutput:
         """Parse CLI output by delegating to jc."""
         try:
-            import jc  # type: ignore[import-untyped]
+            import jc
         except ImportError:
             raise ImportError(
                 "jc is required for JCParser.  Install with:\n"

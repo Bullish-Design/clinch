@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from clinch import BaseCLIError, CommandNotFoundError, ParsingError, TimeoutError
+from clinch import BaseCLIError, CommandNotFoundError, ParsingError, TimeoutError  # noqa: A004
 from clinch.base import BaseCLIResponse, CLIWrapper
 from clinch.fields import Field
 
@@ -122,6 +122,21 @@ def test_execute_non_zero_exit_raises_error_model() -> None:
 
     assert exc_info.value.exit_code != 0
     assert "ls" in exc_info.value.command
+
+
+def test_execute_populates_error_pattern_fields_from_stderr() -> None:
+    class ParseError(BaseCLIError):
+        error_code = Field(pattern=r"ERR-(\d+)")
+
+    class ShWrapper(CLIWrapper):
+        command = "sh"
+        error_model = ParseError
+
+    wrapper = ShWrapper()
+    with pytest.raises(ParseError) as exc_info:
+        wrapper._execute("-c", "echo 'ERR-404: not found' >&2; exit 1", response_model=DummyResponse)
+
+    assert exc_info.value.error_code == "404"
 
 
 def test_strict_mode_raises_on_parsing_failure() -> None:

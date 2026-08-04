@@ -9,7 +9,8 @@ tracking, and :class:`ParsingResult` assembly.
 
 from __future__ import annotations
 
-from typing import Any, Iterable, Type, TypeVar, cast
+from collections.abc import Iterable
+from typing import cast
 
 from pydantic import BaseModel, ValidationError
 
@@ -17,22 +18,21 @@ from clinch.parsing.protocol import Parser, ParserOutput
 from clinch.parsing.regex_parser import RegexParser, _compile
 from clinch.parsing.result import ParsingFailure, ParsingResult
 
-TModel = TypeVar("TModel", bound=BaseModel)
-
 
 def clear_pattern_cache() -> None:
     """Clear the compiled regex pattern cache."""
-    _compile.cache_clear()  # type: ignore[attr-defined]
+    _compile.cache_clear()
 
 
 def get_cache_info() -> dict[str, int]:
     """Return basic statistics about the compiled pattern cache."""
-    info = _compile.cache_info()  # type: ignore[attr-defined]
+    info = _compile.cache_info()
+    maxsize = info.maxsize if info.maxsize is not None else 0
     return {
         "hits": info.hits,
         "misses": info.misses,
         "size": info.currsize,
-        "maxsize": info.maxsize,
+        "maxsize": maxsize,
     }
 
 
@@ -43,8 +43,8 @@ def _normalize_to_str(output: str | Iterable[str]) -> str:
     return "\n".join(output)
 
 
-def parse_output(
-    model: Type[TModel],
+def parse_output[TModel: BaseModel](
+    model: type[TModel],
     output: str | Iterable[str],
     parser: Parser | None = None,
 ) -> ParsingResult[TModel]:

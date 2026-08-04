@@ -1,7 +1,7 @@
 # src/clinch/base/command.py
 from __future__ import annotations
 
-from typing import Any, ClassVar, TypeVar
+from typing import ClassVar, TypeVar
 
 from pydantic import BaseModel
 

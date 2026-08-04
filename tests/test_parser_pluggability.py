@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import pytest
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 from clinch import BaseCLIResponse, Field
-from clinch.parsing import Parser, ParserOutput, ParsingFailure, RegexParser
+from clinch.parsing import Parser, ParserOutput, RegexParser
 from clinch.parsing.engine import parse_output
-
 
 # ---------------------------------------------------------------------------
 # Custom parser

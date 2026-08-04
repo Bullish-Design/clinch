@@ -7,6 +7,7 @@ other parser backends.
 
 from __future__ import annotations
 
+import re
 from functools import lru_cache
 
 from clinch.parsing.protocol import ParserOutput
@@ -14,9 +15,7 @@ from clinch.parsing.result import ParsingFailure
 
 
 @lru_cache(maxsize=256)
-def _compile(pattern: str) -> "re.Pattern[str]":
-    import re
-
+def _compile(pattern: str) -> re.Pattern[str]:
     return re.compile(pattern)
 
 

@@ -1,13 +1,11 @@
 # src/clinch/parsing/result.py
 from __future__ import annotations
 
-from typing import Callable, Generic, TypeVar
+from collections.abc import Callable
 
 from pydantic import BaseModel
 
 from clinch.fields import Field
-
-T = TypeVar("T")
 
 
 class ParsingFailure(BaseModel):
@@ -26,7 +24,7 @@ class ParsingFailure(BaseModel):
         self.attempted_patterns.append(pattern)
 
 
-class ParsingResult(BaseModel, Generic[T]):
+class ParsingResult[T](BaseModel):
     """Container for parsing results with success/failure tracking."""
 
     successes: list[T] = Field(

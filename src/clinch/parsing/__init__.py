@@ -1,6 +1,7 @@
 # src/clinch/parsing/__init__.py
 from __future__ import annotations
 
+from .engine import parse_output
 from .jc_parser import JCParser
 from .protocol import Parser, ParserOutput
 from .regex_parser import RegexParser
@@ -13,4 +14,5 @@ __all__ = [
     "ParserOutput",
     "RegexParser",
     "JCParser",
+    "parse_output",
 ]

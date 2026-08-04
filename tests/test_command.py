@@ -69,7 +69,7 @@ def test_execute_command(monkeypatch: pytest.MonkeyPatch) -> None:
         command = "echo"
 
     # Patch _execute to avoid shelling out
-    def fake_execute(self: TestWrapper, *args: str, response_model: type[TestResponse]):
+    def fake_execute(self: TestWrapper, *args: str, response_model: type[_TestResponse]):
         output = args[0]
         return response_model.parse_output(output)
 

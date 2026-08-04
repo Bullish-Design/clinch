@@ -44,6 +44,10 @@ uv add clinch
 pip install clinch
 ```
 
+# Optional: jc parser adapter (170+ battle-tested parsers)
+pip install clinch[jc]
+```
+
 ## Why CLInch?
 
 **Before CLInch:**
@@ -128,6 +132,70 @@ if result.has_failures:
     print(f"Failed to parse {result.failure_count} lines")
     for failure in result.failures:
         print(f"Line {failure.line_number}: {failure.raw_text}")
+```
+
+## Pluggable Parsers
+
+Parsing is a **strategy**, not a fixed pipeline. The regex engine is the default
+parser, but any object conforming to the `Parser` protocol can be dropped in:
+
+```python
+class MyParser:
+    def parse(self, output: str) -> ParserOutput: ...
+```
+
+### Using jc's parser catalog
+
+The optional `JCParser` adapter (install with `pip install clinch[jc]`) delegates
+to [jc](https://github.com/kellyjonbrazil/jc), giving you its 170+ battle-tested
+parsers for `ps`, `dig`, `df`, `ifconfig`, `netstat`, and more — without writing
+any imperative parsing code:
+
+```python
+from clinch import BaseCLIResponse, CLIWrapper
+from clinch.parsing import JCParser
+
+class DigAnswer(BaseCLIResponse):
+    _cli_parser = JCParser("dig")  # jc's dig parser
+
+    name: str
+    ttl: int
+    data: str
+
+class DigWrapper(CLIWrapper):
+    command = "dig"
+
+    def answers(self, host: str) -> ParsingResult[DigAnswer]:
+        return self._execute("+noall", "+answer", host, response_model=DigAnswer)
+```
+
+jc returns plain dicts; CLInch feeds them straight into your Pydantic model, so
+you still get validated, typed objects in a `ParsingResult` — the only thing
+that changed is where the records come from.
+
+### Writing a custom parser
+
+For output no existing parser handles, implement the `Parser` protocol yourself:
+
+```python
+from clinch.parsing import Parser, ParserOutput
+
+class MyCustomParser:
+    def parse(self, output: str) -> ParserOutput:
+        records = [{"key": line} for line in output.splitlines() if line]
+        return ParserOutput(records=records)
+
+class MyResponse(BaseCLIResponse):
+    _cli_parser = MyCustomParser()
+    key: str
+```
+
+You can also pass a parser explicitly instead of binding it to the model:
+
+```python
+from clinch.parsing import parse_output
+
+result = parse_output(MyResponse, output_text, parser=MyCustomParser())
 ```
 
 ## Usage Examples
@@ -334,6 +402,34 @@ Base exception for CLI errors.
 - `stderr: str` - Standard error output
 - `stdout: str` - Standard output
 - `command: str` - Executed command
+
+**Methods:**
+- `parse_from_stderr(stderr, exit_code, command, stdout="") -> Self` - Parse pattern fields from stderr
+
+#### `Parser` (protocol)
+Pluggable parsing strategy contract.
+
+```python
+class Parser(Protocol):
+    def parse(self, output: str) -> ParserOutput: ...
+```
+
+#### `ParserOutput`
+Raw output of a parser.
+
+**Fields:**
+- `records: list[dict[str, Any]]` - Raw records (one per logical unit)
+- `failures: list[ParsingFailure]` - Parser-level failures
+
+#### `RegexParser`
+The default line-by-line regex engine, built from a model's `_field_patterns`.
+
+#### `JCParser`
+Optional adapter delegating to jc. Requires `pip install clinch[jc]`.
+
+```python
+JCParser(parser_name: str, **kwargs)  # kwargs forwarded to jc.parse()
+```
 
 ### Field Function
 
