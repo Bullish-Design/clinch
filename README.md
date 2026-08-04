@@ -13,19 +13,11 @@ CLInch is a Pydantic-based library for wrapping Unix CLI tools with typed Python
 ## Quick Start
 
 ```python
-from pydantic import field_validator
-
 from clinch import CLIWrapper, BaseCLIResponse, Field
 
 class GitBranch(BaseCLIResponse):
     name: str = Field(pattern=r'\*?\s+(\S+)')
     is_current: bool = Field(default=False, pattern=r'(\*)')
-
-    @field_validator("is_current", mode="before")
-    @classmethod
-    def _coerce_is_current(cls, v: object) -> bool:
-        """Any marker match (``*``) means the branch is current."""
-        return bool(v)
 
 class GitWrapper(CLIWrapper):
     command = "git"
@@ -77,11 +69,6 @@ class GitBranch(BaseCLIResponse):
     name: str = Field(pattern=r'\*?\s+(\S+)')
     is_current: bool = Field(default=False, pattern=r'(\*)')
 
-    @field_validator("is_current", mode="before")
-    @classmethod
-    def _coerce_is_current(cls, v: object) -> bool:
-        return bool(v)
-
 result = git.branches()  # Fully typed, validated Python objects
 ```
 
@@ -109,6 +96,19 @@ class ServerLog(BaseCLIResponse):
     level: str = Field(pattern=r'\[(INFO|WARN|ERROR)\]')
     message: str = Field(pattern=r'\]\s+(.+)$')
 ```
+
+**Bool fields use pattern-presence semantics.** A `bool` field is `True`
+when its pattern matches — so marker characters like `*` work directly:
+
+```python
+class GitBranch(BaseCLIResponse):
+    name: str = Field(pattern=r'\*?\s+(\S+)')
+    is_current: bool = Field(default=False, pattern=r'(\*)')
+```
+
+Captured text that Pydantic can coerce (`yes`/`no`/`1`/`0`/`true`/`false`)
+is honored as-is; any other capture means the pattern matched. When the
+pattern does not match, the field keeps its default.
 
 ### CLI Wrappers
 

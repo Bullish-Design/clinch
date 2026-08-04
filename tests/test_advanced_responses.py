@@ -13,15 +13,6 @@ class _GitBranch(BaseCLIResponse):
     name: str = Field(pattern=r"\*?\s+(\S+)")
     is_current: bool = Field(default=False, pattern=r"(\*)")
 
-    @field_validator("is_current", mode="before")
-    @classmethod
-    def _coerce_is_current(cls, v: object) -> bool:
-        # When the pattern matches we get the literal "*", convert that to True.
-        # When it doesn't match the field is absent and the default False is used.
-        if isinstance(v, str):
-            return v == "*"
-        return bool(v)
-
     @computed_field
     @property
     def short_name(self) -> str:

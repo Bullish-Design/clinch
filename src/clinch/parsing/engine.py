@@ -10,13 +10,49 @@ tracking, and :class:`ParsingResult` assembly.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import cast
+from typing import Any, cast, get_args
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from clinch.parsing.protocol import Parser, ParserOutput
 from clinch.parsing.regex_parser import RegexParser, _compile
 from clinch.parsing.result import ParsingFailure, ParsingResult
+
+_BOOL_ADAPTER = TypeAdapter(bool)
+
+
+def _is_bool_annotation(annotation: Any) -> bool:
+    """Whether the annotation is ``bool`` or ``bool | None``."""
+    if annotation is bool:
+        return True
+    args = get_args(annotation)
+    return len(args) == 2 and bool in args and type(None) in args
+
+
+def _coerce_bool_fields(model: type[BaseModel], record: dict[str, Any]) -> dict[str, Any]:
+    """Apply pattern-presence semantics to bool-typed fields.
+
+    Parsers return raw text.  For a bool-typed field, captured text that
+    Pydantic can coerce (``yes``/``no``/``1``/``0``/``true``/``false``/...)
+    is passed through unchanged; any other captured marker (e.g. ``*`` for
+    ``git branch``) means the pattern matched, i.e. ``True``.  Fields the
+    pattern did not match are absent from the record and keep their default.
+    """
+    coerced = record
+    for name, value in record.items():
+        if isinstance(value, bool):
+            continue
+        field = model.model_fields.get(name)
+        if field is None or not _is_bool_annotation(field.annotation):
+            continue
+        try:
+            coerced_value: Any = _BOOL_ADAPTER.validate_python(value)
+        except ValidationError:
+            coerced_value = True
+        if coerced is record:
+            coerced = dict(record)
+        coerced[name] = coerced_value
+    return coerced
 
 
 def clear_pattern_cache() -> None:
@@ -98,7 +134,7 @@ def parse_output[TModel: BaseModel](
 
     for index, record in enumerate(parser_output.records):
         try:
-            instance = model(**record)
+            instance = model(**_coerce_bool_fields(model, record))
         except ValidationError as exc:
             try:
                 exception_detail = exc.json()

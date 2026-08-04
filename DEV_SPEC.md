@@ -229,6 +229,13 @@ class MyResponse(BaseCLIResponse):
 
 **Purpose:** Apply regex patterns to CLI output and create validated instances.
 
+**Bool fields use pattern-presence semantics.** Before Pydantic validation,
+the engine normalizes bool-typed fields: captured text Pydantic can coerce
+(`yes`/`no`/`1`/`0`/`true`/`false`/...) passes through unchanged; any other
+captured marker (e.g. `*` for `git branch`) means the pattern matched, i.e.
+`True`. A non-matching pattern leaves the field absent so its default
+applies. See `_coerce_bool_fields()`.
+
 **Core Functions:**
 
 #### `parse_single_line()`

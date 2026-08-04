@@ -4,7 +4,6 @@ from __future__ import annotations
 import shutil
 
 import pytest
-from pydantic import field_validator
 
 from clinch import BaseCLIError, Field
 from clinch.base import BaseCLIResponse, CLIWrapper
@@ -57,11 +56,6 @@ def test_ls_integration_nonexistent_path_raises_error_model() -> None:
 class GitBranchResponse(BaseCLIResponse):
     name: str = Field(pattern=r"\*?\s+(\S+)")
     is_current: bool = Field(default=False, pattern=r"(\*)")
-
-    @field_validator("is_current", mode="before")
-    @classmethod
-    def _coerce_is_current(cls, v: object) -> bool:
-        return bool(v)
 
 
 class GitWrapper(CLIWrapper):
