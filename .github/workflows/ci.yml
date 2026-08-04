@@ -1,0 +1,38 @@
+name: CI
+
+"on":
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install dependencies
+        run: pip install -e ".[dev,jc]"
+
+      - name: Lint (ruff)
+        run: ruff check src tests examples
+
+      - name: Type check (mypy)
+        run: mypy src/clinch
+
+      - name: Test (pytest + coverage gate)
+        run: pytest tests/ --cov-fail-under=90
+
+      - name: Build artifacts
+        run: python -m build
+
+      - name: Validate distributions (twine)
+        run: |
+          pip install twine
+          twine check dist/*

@@ -8,6 +8,7 @@ CLInch is a Pydantic-based library for wrapping Unix CLI tools with typed Python
 
 [![PyPI version](https://badge.fury.io/py/clinch.svg)](https://badge.fury.io/py/clinch)
 [![Python versions](https://img.shields.io/pypi/pyversions/clinch.svg)](https://pypi.org/project/clinch/)
+[![CI](https://github.com/Bullish-Design/clinch/actions/workflows/ci.yml/badge.svg)](https://github.com/Bullish-Design/clinch/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Quick Start
