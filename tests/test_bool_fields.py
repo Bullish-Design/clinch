@@ -54,14 +54,30 @@ class NonLiteralMarker(BaseCLIResponse):
 
 
 def test_non_coercible_capture_means_true() -> None:
-    """Presence semantics: 'up' and 'down' are markers, so both are True.
+    """A bool field's pattern is a predicate: matched means True.
 
-    For patterns whose captures carry a value, model the field as a
-    str/Literal and derive the bool instead.
+    ``(up|down)`` matches both values, so both lines are True — faithful
+    execution of a declaration that matches both.  To mean "up only",
+    write the pattern as the predicate (see
+    ``test_bool_pattern_as_predicate``).
     """
     result = parse_output(NonLiteralMarker, "status=up\nstatus=down\n")
     assert result.failure_count == 0
     assert [r.is_up for r in result.successes] == [True, True]
+
+
+class PredicateResponse(BaseCLIResponse):
+    """The honest way to derive a bool from a value-bearing line."""
+
+    status: str = Field(pattern=r"status=(\w+)")  # keep the value
+    is_up: bool = Field(default=False, pattern=r"status=up")  # the predicate
+
+
+def test_bool_pattern_as_predicate() -> None:
+    """Write the pattern as the predicate to get per-value truth."""
+    result = parse_output(PredicateResponse, "status=up\nstatus=down\n")
+    assert result.failure_count == 0
+    assert [(r.status, r.is_up) for r in result.successes] == [("up", True), ("down", False)]
 
 
 class OptionalMarker(BaseCLIResponse):

@@ -98,8 +98,10 @@ class ServerLog(BaseCLIResponse):
     message: str = Field(pattern=r'\]\s+(.+)$')
 ```
 
-**Bool fields use pattern-presence semantics.** A `bool` field is `True`
-when its pattern matches — so marker characters like `*` work directly:
+**Bool fields use pattern-presence semantics.** For a `bool` field, the
+pattern *is the predicate*: when it matches, the field is `True`; when it
+does not, the field keeps its default. So marker characters like `*` work
+directly:
 
 ```python
 class GitBranch(BaseCLIResponse):
@@ -108,8 +110,15 @@ class GitBranch(BaseCLIResponse):
 ```
 
 Captured text that Pydantic can coerce (`yes`/`no`/`1`/`0`/`true`/`false`)
-is honored as-is; any other capture means the pattern matched. When the
-pattern does not match, the field keeps its default.
+is honored as-is; any other capture just means "matched". To derive a bool
+from a value-bearing line, write the pattern as the predicate — don't
+capture the values:
+
+```python
+class ServerStatus(BaseCLIResponse):
+    status: str = Field(pattern=r'status=(\w+)')
+    is_up: bool = Field(default=False, pattern=r'status=up')
+```
 
 ### CLI Wrappers
 
