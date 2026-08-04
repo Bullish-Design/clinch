@@ -1,31 +1,33 @@
-# src/clinch/parsing/engine.py
+"""Parsing engine — orchestrates parser → Pydantic model construction.
+
+This module is the bridge between raw parser output and validated
+Pydantic model instances.  It accepts an optional :class:`Parser`
+implementation (defaulting to :class:`RegexParser` with the model's
+``_field_patterns``) and handles model construction, validation-error
+tracking, and :class:`ParsingResult` assembly.
+"""
+
 from __future__ import annotations
 
-import re
-from functools import lru_cache
-from typing import Any, Dict, Iterable, List, Type, TypeVar, cast
+from typing import Any, Iterable, Type, TypeVar, cast
 
 from pydantic import BaseModel, ValidationError
 
-from clinch.parsing import ParsingFailure, ParsingResult
+from clinch.parsing.protocol import Parser, ParserOutput
+from clinch.parsing.regex_parser import RegexParser, _compile
+from clinch.parsing.result import ParsingFailure, ParsingResult
 
 TModel = TypeVar("TModel", bound=BaseModel)
 
 
-@lru_cache(maxsize=256)
-def _compile_pattern(pattern: str) -> re.Pattern[str]:
-    """Compile and cache regex patterns used by the parsing engine."""
-    return re.compile(pattern)
-
-
 def clear_pattern_cache() -> None:
     """Clear the compiled regex pattern cache."""
-    _compile_pattern.cache_clear()
+    _compile.cache_clear()  # type: ignore[attr-defined]
 
 
-def get_cache_info() -> Dict[str, int]:
+def get_cache_info() -> dict[str, int]:
     """Return basic statistics about the compiled pattern cache."""
-    info = _compile_pattern.cache_info()
+    info = _compile.cache_info()  # type: ignore[attr-defined]
     return {
         "hits": info.hits,
         "misses": info.misses,
@@ -34,74 +36,83 @@ def get_cache_info() -> Dict[str, int]:
     }
 
 
-def _normalize_output(output: str | Iterable[str]) -> List[str]:
-    """Normalize CLI output into a list of lines."""
+def _normalize_to_str(output: str | Iterable[str]) -> str:
+    """Normalize CLI output into a single string."""
     if isinstance(output, str):
-        return output.splitlines()
-    return list(output)
+        return output
+    return "\n".join(output)
 
 
 def parse_output(
     model: Type[TModel],
     output: str | Iterable[str],
+    parser: Parser | None = None,
 ) -> ParsingResult[TModel]:
-    """Parse CLI output into instances of the given response model."""
-    lines = _normalize_output(output)
-    result: ParsingResult[TModel] = ParsingResult()
+    """Parse CLI output into validated instances of *model*.
 
-    patterns = cast(Dict[str, str], getattr(model, "_field_patterns", {}) or {})
+    Parameters
+    ----------
+    model:
+        A :class:`BaseCLIResponse` (or any :class:`pydantic.BaseModel`)
+        subclass whose field names correspond to the keys produced by
+        *parser*.
+    output:
+        Raw CLI stdout/stderr — either a single string or an iterable
+        of lines.
+    parser:
+        An optional :class:`Parser` implementation.  When ``None`` (the
+        default), a :class:`RegexParser` is constructed from the model's
+        ``_field_patterns`` class variable.
 
-    for index, raw_line in enumerate(lines, start=1):
-        if not raw_line.strip():
-            continue
+    Returns
+    -------
+    ParsingResult[TModel]
+        Container with ``successes`` (validated model instances) and
+        ``failures`` (parser-level misses or validation errors).
+    """
+    output_str = _normalize_to_str(output)
 
-        matched_values: Dict[str, Any] = {}
-        attempted_patterns: List[str] = []
+    # --- resolve parser ---------------------------------------------------
+    if parser is None:
+        patterns = cast(dict[str, str], getattr(model, "_field_patterns", {}) or {})
+        parser = RegexParser(patterns)
 
-        for field_name, pattern in patterns.items():
-            attempted_patterns.append(pattern)
-            compiled_pattern = _compile_pattern(pattern)
-            match = compiled_pattern.search(raw_line)
-            if not match:
-                continue
-
-            if match.groups():
-                value: Any = match.group(1)
-            else:
-                value = match.group(0)
-
-            matched_values[field_name] = value
-
-        if not matched_values:
-            result.failures.append(
-                ParsingFailure(
-                    raw_text=raw_line,
-                    attempted_patterns=list(attempted_patterns),
-                    exception=None,
-                    line_number=index,
-                )
+    # --- run parser --------------------------------------------------------
+    try:
+        parser_output: ParserOutput = parser.parse(output_str)
+    except Exception as exc:
+        result: ParsingResult[TModel] = ParsingResult()
+        result.failures.append(
+            ParsingFailure(
+                raw_text=output_str[:500],
+                attempted_patterns=[],
+                exception=str(exc),
+                line_number=0,
             )
-            continue
+        )
+        return result
 
+    # --- assemble result ---------------------------------------------------
+    result = ParsingResult[TModel]()
+    result.failures.extend(parser_output.failures)
+
+    for index, record in enumerate(parser_output.records):
         try:
-            instance = model(**matched_values)
+            instance = model(**record)
         except ValidationError as exc:
-            # Preserve full validation details where possible
             try:
                 exception_detail = exc.json()
             except Exception:
                 exception_detail = str(exc)
-
             result.failures.append(
                 ParsingFailure(
-                    raw_text=raw_line,
-                    attempted_patterns=list(attempted_patterns),
+                    raw_text=str(record),
+                    attempted_patterns=[],
                     exception=exception_detail,
-                    line_number=index,
+                    line_number=index + 1,
                 )
             )
             continue
-
         result.successes.append(instance)
 
     return result

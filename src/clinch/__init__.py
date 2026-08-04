@@ -11,13 +11,16 @@ hierarchy.
 from .base import BaseCLICommand, BaseCLIError, BaseCLIResponse, CLIWrapper
 from .exceptions import CLInchException, CommandNotFoundError, ParsingError, TimeoutError
 from .fields import Field
-from .parsing import ParsingFailure, ParsingResult
+from .parsing import JCParser, Parser, ParsingFailure, ParsingResult, RegexParser
 from .utils import regex_helpers
 
 __all__ = [
     "Field",
     "ParsingFailure",
     "ParsingResult",
+    "Parser",
+    "RegexParser",
+    "JCParser",
     "CLInchException",
     "ParsingError",
     "CommandNotFoundError",

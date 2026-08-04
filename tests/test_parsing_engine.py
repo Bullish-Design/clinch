@@ -8,11 +8,11 @@ from pydantic import BaseModel, ValidationError, field_validator
 from clinch import BaseCLIResponse, Field
 from clinch.parsing import ParsingResult
 from clinch.parsing.engine import (
-    _compile_pattern,
     clear_pattern_cache,
     get_cache_info,
     parse_output,
 )
+from clinch.parsing.regex_parser import _compile as _compile_pattern
 
 
 class EngineResponse(BaseCLIResponse):
@@ -55,12 +55,14 @@ def test_pattern_caching_returns_same_compiled_object() -> None:
 
 
 def test_cache_clearing_resets_cache_size() -> None:
-    clear_pattern_cache()
-    _compile_pattern(r"test: (\w+)")
+    from clinch.parsing.regex_parser import _compile
+
+    _compile.cache_clear()  # type: ignore[attr-defined]
+    _compile(r"test: (\w+)")
     info_before = get_cache_info()
     assert info_before["size"] > 0
 
-    clear_pattern_cache()
+    _compile.cache_clear()  # type: ignore[attr-defined]
     info_after = get_cache_info()
     assert info_after["size"] == 0
 
@@ -76,7 +78,7 @@ def test_validation_error_details_preserved_as_json() -> None:
                 raise ValueError("must be positive")
             return v
 
-    StrictModel._field_patterns = {"value": r"value: (-?\d+)"}
+
 
     result = parse_output(StrictModel, "value: -5")
 

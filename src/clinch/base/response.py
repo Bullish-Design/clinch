@@ -5,14 +5,14 @@ from typing import Any, ClassVar, Dict, Iterable, TypeVar
 
 from pydantic import BaseModel
 
-from clinch.parsing import ParsingResult
+from clinch.parsing import Parser, ParsingResult
 from clinch.parsing.engine import parse_output as _parse_output
 
 TResponse = TypeVar("TResponse", bound="BaseCLIResponse")
 
 
 class BaseCLIResponse(BaseModel):
-    """Base model for all CLI response types in CLInch.
+    r"""Base model for all CLI response types in CLInch.
 
     Subclasses map raw CLI output into validated Pydantic models. Fields typically
     declare regex extraction patterns using :func:`clinch.Field`, and parsing is
@@ -86,12 +86,33 @@ class BaseCLIResponse(BaseModel):
             def format_cpu(self, value: float) -> str:
                 return f"{value:.1f}%"
 
+    Plugable parsers
+    -----------------
+    By default, CLInch uses a regex-based parser driven by the patterns
+    declared on each field.  You can swap in an alternative parser by setting
+    the ``_cli_parser`` class variable on your model::
+
+        from clinch import BaseCLIResponse
+        from clinch.parsing import JCParser
+
+        class DigAnswer(BaseCLIResponse):
+            _cli_parser = JCParser("dig")
+
+            name: str
+            ttl: int
+            data: str
+
+    Any object conforming to the :class:`~clinch.parsing.Parser` protocol
+    works — including hand-rolled parsers.  When ``_cli_parser`` is ``None``
+    (the default), the regex engine is used.
+
     In general, treat CLI response models like any other Pydantic model: regex
     patterns get the data *into* the model, and Pydantic features keep that data
     clean, well-typed, and convenient to work with.
     """
 
     _field_patterns: ClassVar[Dict[str, str]] = {}
+    _cli_parser: ClassVar[Parser | None] = None
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:  # type: ignore[override]
@@ -130,5 +151,19 @@ class BaseCLIResponse(BaseModel):
         cls: type[TResponse],
         output: str | Iterable[str],
     ) -> ParsingResult[TResponse]:  # type: ignore[type-var]
-        """Parse CLI output into response instances using the engine."""
-        return _parse_output(cls, output)
+        """Parse CLI output into response instances using the engine.
+
+        The parser used is determined by ``cls._cli_parser``.  When
+        ``None`` (the default), the built-in :class:`RegexParser` is
+        used with the model's ``_field_patterns``.
+
+        Set ``_cli_parser`` on a subclass to use a different backend::
+
+            from clinch.parsing import JCParser
+
+            class DigAnswer(BaseCLIResponse):
+                _cli_parser = JCParser("dig")
+                name: str
+                ttl: int
+        """
+        return _parse_output(cls, output, parser=cls._cli_parser)
