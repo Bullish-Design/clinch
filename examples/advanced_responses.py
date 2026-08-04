@@ -15,6 +15,12 @@ class GitBranch(BaseCLIResponse):
     name: str = Field(pattern=r"\*?\s+(\S+)")
     is_current: bool = Field(default=False, pattern=r"(\*)")
 
+    @field_validator("is_current", mode="before")
+    @classmethod
+    def _coerce_is_current(cls, v: object) -> bool:
+        """Any marker match (``*``) means the branch is current."""
+        return bool(v)
+
     @computed_field
     @property
     def short_name(self) -> str:
