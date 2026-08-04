@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-04
+
 ### Added
 
 - Pluggable parser architecture: `Parser` protocol with `RegexParser` (the
@@ -29,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Parsing engine modernized to PEP 695 generics (`ParsingResult[T]`,
   `parse_output[TModel]`)
 - Examples moved out of the shipped wheel into the root `examples/` directory
+  and guarded by integration tests; fixed latent bugs they contained
+  (unanchored `mem` pattern, uppercase-only log level pattern, non-generic
+  `BaseCLICommand` subscript)
 - `parse_output` exported from `clinch.parsing`
 
 ### Fixed

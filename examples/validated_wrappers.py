@@ -14,7 +14,7 @@ class GitBranch(BaseCLIResponse):
     is_current: bool = Field(default=False, pattern=r"(\*)")
 
 
-class GitBranchCommand(BaseCLICommand[GitBranch]):
+class GitBranchCommand(BaseCLICommand):
     """Command object for `git branch` with basic validation."""
 
     subcommand = "branch"

@@ -39,7 +39,7 @@ class LogEntry(BaseCLIResponse):
     """Example showing type coercion and model-level validation."""
 
     timestamp: datetime = Field(pattern=r"(\d{4}-\d{2}-\d{2})")
-    level: str = Field(pattern=r"(INFO|WARN|ERROR)")
+    level: str = Field(pattern=r"(?i)(INFO|WARN|ERROR)")
     message: str = Field(pattern=r"- (.+)$")
 
     @field_validator("timestamp", mode="before")
@@ -59,7 +59,7 @@ class ProcessUsage(BaseCLIResponse):
     """Example showing serializers for nicer exports."""
 
     cpu_percent: float = Field(pattern=r"(\d+\.\d+)")
-    memory_mb: int = Field(pattern=r"(\d+)")
+    memory_mb: int = Field(pattern=r"mem=(\d+)")
 
     @field_serializer("cpu_percent")
     def format_cpu(self, value: float) -> str:
@@ -74,32 +74,19 @@ class ProcessUsage(BaseCLIResponse):
 
 def demo_git_branch(output: str) -> list[GitBranch]:
     """Parse a git-branch-like output string into GitBranch models."""
-    # For library users the usual pattern is: GitBranch.parse_output(output)
-    # This helper uses the engine directly to keep the example explicit.
-    GitBranch._field_patterns = {
-        "name": r"\*?\s+(\S+)",
-        "is_current": r"(\*)",
-    }
+    # Patterns come from the Field declarations; parse_output builds the
+    # RegexParser from them automatically.
     result = parse_output(GitBranch, output)
     return result.successes
 
 
 def demo_log_entries(output: str) -> list[LogEntry]:
     """Parse log lines into LogEntry instances."""
-    LogEntry._field_patterns = {
-        "timestamp": r"(\d{4}-\d{2}-\d{2})",
-        "level": r"(INFO|WARN|ERROR)",
-        "message": r"- (.+)$",
-    }
     result = parse_output(LogEntry, output)
     return result.successes
 
 
 def demo_process_usage(output: str) -> list[ProcessUsage]:
     """Parse process usage lines into ProcessUsage instances."""
-    ProcessUsage._field_patterns = {
-        "cpu_percent": r"(\d+\.\d+)",
-        "memory_mb": r"(\d+)",
-    }
     result = parse_output(ProcessUsage, output)
     return result.successes

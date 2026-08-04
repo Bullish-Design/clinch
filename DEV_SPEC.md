@@ -2,8 +2,8 @@
 
 # CLInch Developer Specification
 
-**Version:** 0.1.0  
-**Last Updated:** 2024-11-24  
+**Version:** 0.2.0  
+**Last Updated:** 2026-08-04  
 **Status:** Active
 
 ## Table of Contents

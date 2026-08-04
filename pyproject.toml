@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "clinch"
-version = "0.1.0"
+version = "0.2.0"
 description = "Pydantic-based library for wrapping CLI tools with type-safe Python interfaces."
 readme = "README.md"
 requires-python = ">=3.12"
