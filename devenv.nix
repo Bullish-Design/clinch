@@ -1,6 +1,8 @@
 { pkgs, lib, config, inputs, ... }:
 
 {
+  cachix.pull = [ "devenv" ];
+
   # https://devenv.sh/basics/
   env.GREET = "devenv";
 
