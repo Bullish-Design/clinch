@@ -1,9 +1,7 @@
 # AGENTS.md — project instructions
 
-> **Seed.** The `my-ai` personal layer wrote this file because this repo had
-> none. It is now **the repo's** file: edit it freely, and no `my-ai` update will
-> ever overwrite it (`_skip_if_exists`). Every agent tool reads it through the
-> `CLAUDE.md` symlink.
+> **Canonical instructions.** This file belongs to the repository. Every agent
+> tool reads it through the `CLAUDE.md` symlink.
 
 ## What this project is
 
@@ -26,14 +24,12 @@ _The two or three directories a newcomer actually needs. Deeper detail belongs i
 
 ## The standing configuration
 
-The user's cross-repo law — devenv discipline, the exit-code contract, manager
-routing, the agent-files convention — lives in
-[`.agents/skills/my-ai/SKILL.md`](.agents/skills/my-ai/SKILL.md), delivered by
-the `my-ai` personal layer. **Read it first.** Keep this file for what is true of
-*this* project only.
+Read the writing rules in
+[`.agents/skills/writing/SKILL.md`](.agents/skills/writing/SKILL.md). For
+manager routing, start at the `repoman` skill. Keep this file for what is true
+of *this* project only.
 
 ```bash
 copyroom layer list              # which template layers manage this repo
-copyroom update --layer my-ai    # converge the personal layer
 copyroom agent-files check       # conformance report
 ```
